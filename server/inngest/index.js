@@ -3,7 +3,7 @@ import User from "../models/User.js";
 import Connection from "../models/Connection.js";
 import Story from "../models/Story.js";
 import Message from "../models/Message.js";
-import { sendEmail } from "../utils/sendEmail.js";
+import sendEmail from "../utils/sendEmail.js";
 
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "my-app" });
