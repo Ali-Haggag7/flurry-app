@@ -1,4 +1,4 @@
-import imageKit from "../configs/imageKit.js";
+import imagekit from "../configs/imagekit.js"; // 👈 لازم الامتداد .js في الآخر
 import expressAsyncHandler from "express-async-handler";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
@@ -55,13 +55,13 @@ export const sendMessage = expressAsyncHandler(async (req, res) => {
     if (imageFile) {
         messageType = "image";
         // (تصليح) استخدام Buffer بدل Path
-        const uploadResponse = await imageKit.upload({
+        const uploadResponse = await imagekit.upload({
             file: imageFile.buffer,
             fileName: imageFile.originalname,
             folder: "/messages"
         });
 
-        mediaUrl = imageKit.url({
+        mediaUrl = imagekit.url({
             path: uploadResponse.filePath,
             transformation: [{ quality: "auto" }, { width: "800" }] // حجم معقول للشات
         });

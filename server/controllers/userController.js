@@ -1,6 +1,6 @@
 import expressAsyncHandler from "express-async-handler";
 import User from "../models/User.js";
-import imagekit from "../configs/imageKit.js";
+import imagekit from "../configs/imagekit.js"; // 👈 لازم الامتداد .js في الآخر
 
 /**----------------------------------------------
  * @desc (دي الفانكشن اللي هتحل المشكلة)

@@ -1,7 +1,7 @@
 import expressAsyncHandler from "express-async-handler";
 import Story from "../models/Story.js";
 import User from "../models/User.js";
-import imageKit from "../configs/imageKit.js";
+import imagekit from "../configs/imagekit.js"; // 👈 لازم الامتداد .js في الآخر
 import { inngest } from "../inngest/index.js";
 
 /**----------------------------------------------
@@ -40,7 +40,7 @@ export const addStory = expressAsyncHandler(async (req, res) => {
 
     // 4. رفع الميديا (لو موجودة)
     if (file) {
-        const uploadResponse = await imageKit.upload({
+        const uploadResponse = await imagekit.upload({
             file: file.buffer,
             fileName: file.originalname,
             folder: "/stories/" // فولدر خاص بالاستوري
@@ -54,8 +54,8 @@ export const addStory = expressAsyncHandler(async (req, res) => {
             transformationOptions = [{ quality: "auto" }];
         }
         // لو فيديو، بنسيب المصفوفة فاضية [] عشان الرابط يرجع خام من غير tr:q-auto
-        
-        mediaUrl = imageKit.url({
+
+        mediaUrl = imagekit.url({
             path: uploadResponse.filePath,
             transformation: transformationOptions,
         });
@@ -211,7 +211,7 @@ export const deleteStory = expressAsyncHandler(async (req, res) => {
     // 3. امسح من الداتابيز
     await Story.findByIdAndDelete(id);
 
-    // (Premium Note): لو عايز تمسح الصورة من ImageKit، لازم تكون مخزن fileId في الموديل
+    // (Premium Note): لو عايز تمسح الصورة من imagekit، لازم تكون مخزن fileId في الموديل
     // لو مش مخزنه، مش مشكلة، المساحة بتشيل كتير.
 
     res.status(200).json({
