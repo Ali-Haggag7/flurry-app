@@ -2,7 +2,7 @@ import expressAsyncHandler from "express-async-handler"
 import Post from "../models/Post.js"
 import User from "../models/User.js"
 import Comment from "../models/Comment.js"
-import imageKit from "../configs/imageKit.js"
+import imagekit from "../configs/imagekit.js"; // 👈 لازم الامتداد .js في الآخر
 import Notification from "../models/Notification.js"
 
 
@@ -303,7 +303,7 @@ export const addPost = expressAsyncHandler(async (req, res) => {
     if (hasFiles) {
         image_urls = await Promise.all(
             files.map(async (file) => {
-                const response = await imageKit.upload({
+                const response = await imagekit.upload({
                     file: file.buffer,
                     fileName: file.originalname,
                     folder: "posts"
@@ -364,7 +364,7 @@ export const updatePost = expressAsyncHandler(async (req, res) => {
     // لو مبعتش content جديد، خلي القديم زي ما هو
     post.content = content || post.content;
 
-    // (ملحوظة: تعديل الصور قصة تانية بتحتاج رفع ملفات ومسح القديم من ImageKit)
+    // (ملحوظة: تعديل الصور قصة تانية بتحتاج رفع ملفات ومسح القديم من imagekit)
     // (عادة زرار Edit بيسمح بتعديل الكلام بس، وده الأسهل والأكثر شيوعاً)
 
     // 5. سيف التغييرات
@@ -402,7 +402,7 @@ export const deletePost = expressAsyncHandler(async (req, res) => {
         throw new Error("You are not authorized to delete this post.");
     }
 
-    // هنا ممكن تضيف كود مسح الصور من ImageKit لو حابب (Premium Step)
+    // هنا ممكن تضيف كود مسح الصور من imagekit لو حابب (Premium Step)
 
     await Post.findByIdAndDelete(id);
 
