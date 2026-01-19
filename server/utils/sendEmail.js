@@ -1,61 +1,41 @@
-// 1. بنستدعي مكتبة "nodemailer" اللي هي "ساعي البريد"
 import nodemailer from "nodemailer";
 
-// 2. بنجهز "ساعي البريد" (Transporter)
-// ده الأوبجكت اللي شايل بيانات السيرفر اللي هنبعت منه
-// إحنا بنجهزه مرة واحدة بس هنا
+// إعدادات الساعي (ثبتنا الهوست والبورت عشان نمنع اللخبطة)
 const transporter = nodemailer.createTransport({
-    // ده سيرفر "MailerSend" اللي إنت مشترك فيه
-    host: "smtp.mailersend.net",
-    // ده البورت الآمن للاتصال (Standard)
-    port: 587,
-    // دي بيانات الدخول (اليوزر والباسورد) اللي بنجيبها من ملف .env
+    host: "sandbox.smtp.mailtrap.io", // كتبناه بايدينا
+    port: 587,                        // 👈👈 أجبرناه يستخدم 587 (ده المهم)
     auth: {
-        user: process.env.SMTP_USER, // اليوزر نيم بتاعك في MailerSend
-        pass: process.env.SMTP_PASS, // الباسورد بتاعك
+        user: process.env.SMTP_USER,  // دول شغالين تمام سيبهم
+        pass: process.env.SMTP_PASS,
     },
 });
 
 /**
- * 3. دي الفانكشن "المساعدة" اللي هنستخدمها في أي مكان في المشروع
- * @param {object} options - أوبجكت فيه بيانات الإيميل
- * @param {string} options.to - الإيميل اللي هنبعت "له"
- * @param {string} options.subject - عنوان الرسالة
- * @param {string} options.body - محتوى الرسالة (HTML)
+ * دالة إرسال الإيميل
  */
-const sendEmail = async ({ to, subject, body }) => {
-    // بنستخدم (try...catch) عشان لو حصل أي مشكلة في الإرسال
-    // (زي الباسورد غلط أو السيرفر واقع) الأبليكيشن ميكراش
+const sendEmail = async ({ to, subject, html }) => {
+    // لوج عشان نتأكد إنه شغال صح
+    console.log("🚀 SMTP Config (Active):", {
+        host: "sandbox.smtp.mailtrap.io",
+        port: 587,
+        user: process.env.SMTP_USER
+    });
+
     try {
-        // 4. ده الأمر الفعلي بالإرسال (مستني الرد عشان كده await)
-        const response = await transporter.sendMail({
-            // الإيميل اللي الرسالة طالعة "منه" (لازم يكون متسجل في MailerSend)
-            from: process.env.SENDER_EMAIL,
-
-            // الإيميل اللي هتبعت "له" (ده اللي جاي كبارامتر)
+        const info = await transporter.sendMail({
+            from: `"FlowNet System" <${process.env.SENDER_EMAIL || "test@flownet.com"}>`,
             to: to,
-
-            // عنوان الرسالة
             subject: subject,
-
-            // محتوى الرسالة (وبنقوله إنه HTML عشان يقبل لينكات وتنسيق)
-            html: body
+            html: html,
         });
 
-        // (اختياري) نطبع في الكونسول إن الدنيا تمام
-        console.log("Email sent successfully:", response.messageId);
-
-        // بنرجع الرد للي نده علينا (ده دليل النجاح)
-        return response;
+        console.log(`✅ Email sent via Mailtrap! Message ID: ${info.messageId}`);
+        return true;
 
     } catch (error) {
-        // لو حصل أي مشكلة
-        console.error("Error sending email:", error);
-
-        // بنرجع null عشان الكنترولر اللي بينده يعرف إن الإرسال فشل
-        return null;
+        console.error("❌ Error sending email:", error);
+        return false;
     }
-}
+};
 
-// 5. بنعمل "تصدير" للفانكشن دي عشان باقي الملفات تشوفها وتستخدمها
 export default sendEmail;

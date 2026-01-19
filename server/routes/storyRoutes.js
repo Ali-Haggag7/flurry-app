@@ -5,7 +5,10 @@ import {
     addStory,
     getStoriesFeed,
     getUserStories,
-    deleteStory
+    deleteStory,
+    viewStory,
+    handleStoriesEnd,
+    toggleReaction
 } from '../controllers/storyController.js';
 
 const storyRouter = express.Router();
@@ -22,6 +25,11 @@ storyRouter.post('/add', protect, upload.single('media'), addStory);
 // (ده اللي بيعمل التجميعة والدوائر)
 storyRouter.get('/feed', protect, getStoriesFeed);
 
+// مشاهدة استوري
+storyRouter.put("/:id/view", protect, viewStory);
+
+// مشاهده كل استوريهات اليوزر
+storyRouter.put('/mark-all-seen/:targetUserId', protect, handleStoriesEnd);
 
 // ==================================================
 // 2. إدارة الاستوري (Management)
@@ -32,6 +40,8 @@ storyRouter.get('/user/:userId', protect, getUserStories);
 
 //مسح استوري
 storyRouter.delete('/:id', protect, deleteStory);
+
+storyRouter.post('/:storyId/react', protect, toggleReaction);
 
 // 3. التصدير
 export default storyRouter;

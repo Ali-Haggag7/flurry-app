@@ -1,83 +1,57 @@
 import mongoose from "mongoose";
 
-// 1. سكيما فرعية للردود (Sub-Schema for Replies)
-// عملناها سكيما لوحدها عشان الكود يبقى نضيف، بس هي هتتخزن جوه الكومنت
-const replySchema = new mongoose.Schema({
+const commentSchema = new mongoose.Schema({
+    // 1️⃣ الكومنت ده تبع أنهي بوست؟
+    post: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Post",
+        required: true,
+        index: true
+    },
+    // 2️⃣ مين الكاتب؟
     user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         required: true
     },
+    // 3️⃣ المحتوى
     text: {
         type: String,
         required: true,
         trim: true
     },
+    // 4️⃣ 👇 التغيير الجذري هنا: الـ Parent Referencing
+    // لو فيه ID هنا، يبقى ده "رد" على الكومنت صاحب الـ ID ده
+    // لو null، يبقى ده "كومنت رئيسي"
+    parentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Comment",
+        default: null,
+        index: true // عشان لما نجيب الردود يبقى سريع
+    },
+    // 5️⃣ اللايكات
     likes: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
     }],
-    createdAt: {
-        type: Date,
-        default: Date.now
+    isEdited: {
+        type: Boolean,
+        default: false
     }
-}, { _id: true }); // _id: true مهم عشان كل رد يبقى ليه ID خاص بيه نقدر نمسحه بيه
-
-
-// 2. السكيما الأساسية للكومنت
-const commentSchema = new mongoose.Schema({
-    // --- العلاقات ---
-    post: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Post",
-        required: true,
-        index: true // (مهم جداً) عشان نقدر نجيب كل كومنتات بوست معين بسرعة
-    },
-    user: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true
-    },
-
-    // --- المحتوى ---
-    text: {
-        type: String,
-        required: true,
-        trim: true // بيشيل المسافات الزيادة
-    },
-
-    // --- التفاعل ---
-    likes: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User"
-    }],
-
-    // --- الردود (Embedded) ---
-    // هنا بنستخدم السكيما الفرعية اللي عملناها فوق
-    replies: [replySchema]
-
 }, {
-    timestamps: true // بيضيف createdAt (تاريخ الكومنت) و updatedAt
+    timestamps: true
 });
 
-// ========================================================
-// 🧠 المنطقة الذكية (Indexes & Validation)
-// ========================================================
-
-// 1. الفهرس (Performance Index) 🔥
-// لما نعوز نجيب كومنتات بوست معين، غالباً بنعوزها "مترتبة بالوقت"
-// الفهرس ده بيخلي المونجو تجيب الكومنتات دي في "لحظة"
-commentSchema.index({ post: 1, createdAt: -1 });
-
-// 2. التحقق (Validation) 🛡️
-// نتأكد إن الكومنت مش فاضي
-commentSchema.pre("validate", function (next) {
-    if (this.text && this.text.trim().length === 0) {
-        next(new Error("Comment text cannot be empty."));
-    } else {
-        next();
-    }
+// Virtual Field: عشان لو حبينا نجيب الردود المباشرة (اختياري)
+commentSchema.virtual('replies', {
+    ref: 'Comment',
+    localField: '_id',
+    foreignField: 'parentId'
 });
+
+// تفعيل الـ Virtuals
+commentSchema.set('toObject', { virtuals: true });
+commentSchema.set('toJSON', { virtuals: true });
 
 const Comment = mongoose.model("Comment", commentSchema);
 export default Comment;

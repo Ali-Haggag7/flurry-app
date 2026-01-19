@@ -4,6 +4,8 @@ import User from "../models/User.js"
 import Comment from "../models/Comment.js"
 import imagekit from "../configs/imagekit.js"; // 👈 لازم الامتداد .js في الآخر
 import Notification from "../models/Notification.js"
+import Story from "../models/Story.js"
+import Report from "../models/Report.js";
 
 
 // ========= HELPERS =========
@@ -97,98 +99,143 @@ const populatePostData = async (post) => {
 
 // ========= CONTROLLERS =========
 /**----------------------------------------------
- * @desc Get Posts Feed
+ * @desc Get Feed Posts (Unified Logic For You & Following) 🌐
  * @route /api/post/feed
  * @method GET
  * @access Private
 --------------------------------------------------*/
 export const getPostsFeed = expressAsyncHandler(async (req, res) => {
+    // 1. استلام البيانات
+    const currentUser = req.user; // Full User Object from Middleware
+    const { type } = req.query;   // "for-you" or "following"
 
-    // 👇👇👇 (التعديل المهم جداً) 👇👇👇
-    // بدل ما نجيب Clerk ID، بنستخدم اليوزر الجاهز اللي الميدلوير جابه
-    // req.user هنا هو الـ Document الكامل من الداتابيز (بما فيه الـ _id والـ blockedUsers)
-    const currentUser = req.user;
-
-    // (تحسين 5) - Pagination (جلب رقم الصفحة والعدد)
-    // بنجيب رقم الصفحة من (req.query)، لو مش موجود بنفترض 1
+    // 2. Pagination
     const page = parseInt(req.query.page) || 1;
-    // بنجيب العدد (الـ limit)، لو مش موجود بنفترض 10
     const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit; // الحسبة بتاعة "هنطنش كام بوست"
+    const skip = (page - 1) * limit;
 
-    // --- (تصليح 2 & 3 & 4) - لوجيك البلوك والاستبعاد ---
-
-    // 1. هات اليوزر "بتاعي" (عشان أعرف أنا عملت بلوك لمين)
-    // (ملحوظة: currentUser جاي من الميدلوير، فمش محتاجين نعمل findById تاني هنا إلا لو عايز تتأكد إنه up-to-date أوي)
-    // بس للأمان ممكن نستخدم القيمة اللي جاية معانا علطول:
-
-    // (تصليح 4) - بنصلح الـ map عشان تبقى مقروءة
+    // ---------------------------------------------------------
+    // 🚫 Zone 1: Block Logic (قائمة الحظر)
+    // ---------------------------------------------------------
+    // الناس اللي أنا حاظرهم
     const blockedByMe = currentUser.blockedUsers?.map(id => id.toString()) || [];
+    // الناس اللي حاظريني (استعلام سريع)
+    const usersWhoBlockedMe = await User.find({ blockedUsers: currentUser._id }).distinct('_id');
+    const blockedByThem = usersWhoBlockedMe.map(id => id.toString());
 
-    // 2. (تصليح 2) - هات الناس اللي "هما" عملولي بلوك
-    // 👇 هنا بنستخدم currentUser._id (بتاع مونجو) مش Clerk ID
-    const usersWhoBlockedMe = await User.find({ blockedUsers: currentUser._id })
-        .select("_id")
+    // القائمة السوداء الكاملة
+    const baseExcludeList = [...blockedByMe, ...blockedByThem];
+
+    // 2. شرط الإخفاء (يطبق على الكل)
+    const isHiddenCondition = {
+        $or: [
+            { isHidden: false },
+            { isHidden: { $exists: false } }
+        ]
+    };
+
+    // ---------------------------------------------------------
+    // 🔍 Zone 2: Query Builder (تحديد نوع الفيد)
+    // ---------------------------------------------------------
+    let query = {};
+
+    if (type === 'following') {
+        // ✅ Following Feed
+        query = {
+            $and: [
+                {
+                    user: {
+                        $in: currentUser.following, // الناس اللي بتابعهم
+                        $nin: baseExcludeList       // مش محظورين
+                    }
+                },
+                isHiddenCondition // 👈 ضفنا الشرط هنا
+            ]
+        };
+    }
+    else {
+        // 🌍 For You Feed:
+        // (الكل) - (المحظورين) - (الحسابات الخاصة الغريبة)
+
+        // 1. دايرتي (أنا + اللي بتابعهم)
+        const myCircle = [...currentUser.following, currentUser._id];
+
+        // 2. الحسابات الخاصة اللي "برا" دايرتي (ممنوع أشوفهم)
+        const hiddenPrivateUsers = await User.find({
+            isPrivate: true,
+            _id: { $nin: myCircle }
+        }).distinct('_id');
+
+        // 3. القائمة النهائية للاستبعاد
+        const finalExcludeList = [...baseExcludeList, ...hiddenPrivateUsers];
+
+        query = {
+            $and: [
+                { user: { $nin: finalExcludeList } },
+                isHiddenCondition // 👈 وضفناه هنا كمان
+            ]
+        };
+    }
+
+    // ---------------------------------------------------------
+    // 🚀 Zone 3: Execution & Stories Injection
+    // ---------------------------------------------------------
+    console.log("Query:", JSON.stringify(query, null, 2)); // شوف هو بيدور على إيه
+    // 1. جلب البوستات
+    let posts = await Post.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('user', 'full_name username profile_picture isPrivate isVerified') // بيانات صاحب البوست
+        .populate('comments.user', 'full_name username profile_picture')
         .lean();
-    const blockedByThem = usersWhoBlockedMe.map(user => user._id.toString());
 
-    // 3. لستة الاستبعاد "الكاملة"
-    // (تصليح 3) - شيلنا "userId" عشان نشوف بوستاتنا
-    const excludeIds = [...blockedByMe, ...blockedByThem];
+    // 2. (اختياري بس جامد) إضافة الـ Stories لكل يوزر في الفيد 📸
+    // عشان تظهر الدائرة الملونة حوالين صورته في الـ Feed
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // --- الكويري الأساسي (جلب البوستات) ---
-    const posts = await Post.find({
-        user: { $nin: excludeIds } // هات البوستات اللي أصحابها "مش" في لستة الاستبعاد
-    })
-        .sort({ createdAt: -1 }) // رتب من الجديد للقديم
-        .skip(skip)              // (تحسين 5) - نطنش الصفحات اللي فاتت
-        .limit(limit)            // (تحسين 5) - هات 10 بس
-        .populate('comments.user', '_id full_name username profile_picture') // (حل سحري جزئي)
-        .populate('user', '_id full_name username profile_picture')          // (حل سحري جزئي)
-        .lean();
+    // بنجمع كل الـ User IDs اللي ظهروا في البوستات دي
+    const userIdsInFeed = posts.map(p => p.user._id);
 
-    /* * (توضيح الحل السحري 👆)
-     * في مشكلة الـ N+1، الحل الأسرع (بدل التجميع اليدوي) هو استخدام "populate" بتاع Mongoose.
-     * إحنا هنا بنقوله: "بعد ما تجيب الـ 10 بوستات، روح هات "user" بتاع كل بوست، وهات "user" بتاع كل كومنت جوه كل بوست".
-     * Mongoose ذكي كفاية إنه هيعمل ده في "كويري واحد" لكل populate (يعني 1 للبوستات + 1 لليوزرز + 1 لبتوع الكومنتات = 3 كويريز).
-     * ده "أنضف" بكتير من إننا نعمل اللوجيك اليدوي بتاع التجميع طالما إحنا بنستخدم Mongoose.
-     * (ملحوظة: الحل اليدوي اللي شرحته فوق (التجميع في Set) بيبقى "أسرع" في الداتابيز الكبيرة جداً، بس الحل ده (populate) "أنضف" في الكود 100 مرة).
-     * عشان الكود ده يشتغل، لازم الموديل بتاع "Post" يكون فيه `ref: "User"` مظبوط.
-     */
+    // بنجيب الستوريز النشطة لليوزرز دول مرة واحدة (Bulk Query)
+    const activeStories = await Story.find({
+        user: { $in: userIdsInFeed },
+        createdAt: { $gte: twentyFourHoursAgo }
+    }).lean();
 
-    // --- (حل بديل لو الـ populate مش شغال) ---
-    // (نفس الكود المعطل بتاعك، سيبته زي ما هو عشان المرجع)
-    /*
-    const userIds = new Set();
-    posts.forEach(post => {
-        userIds.add(post.user.toString());
-        if (post.comments) { // نتأكد إن فيه كومنتات
-            post.comments.forEach(c => userIds.add(c.user.toString()));
-        }
+    // بندمج الستوريز مع البوستات
+    posts = posts.map(post => {
+        const userStories = activeStories.filter(s => s.user.toString() === post.user._id.toString());
+
+        // بنحسب هل أنا شفت الستوريز دي ولا لأ
+        const storiesWithSeenStatus = userStories.map(s => ({
+            ...s,
+            // 👇 توحيد منطق الـ Seen بدقة
+            seen: s.viewers ? s.viewers.some(v => {
+                const viewerId = v.user ? v.user.toString() : v.toString();
+                return viewerId === currentUser._id.toString();
+            }) : false
+        }));
+
+        return {
+            ...post,
+            user: {
+                ...post.user,
+                stories: storiesWithSeenStatus,
+                hasActiveStory: userStories.length > 0
+            }
+        };
     });
 
-    const users = await User.find({ _id: { $in: [...userIds] } })
-        .select("_id full_name username profile_picture")
-        .lean();
-    
-    const userMap = new Map(users.map(u => [u._id.toString(), u]));
-
-    const postsWithUserData = posts.map(post => {
-        const populatedUser = userMap.get(post.user.toString()) || UNKNOWN_USER;
-        const populatedComments = post.comments ? post.comments.map(c => {
-            return { ...c, user: userMap.get(c.user.toString()) || UNKNOWN_USER };
-        }) : [];
-
-        return { ...post, user: populatedUser, comments: populatedComments };
-    });
-    */
-    // --- (نهاية الحل البديل) ---
+    // 3. إحصائيات الصفحات
+    const totalPosts = await Post.countDocuments(query);
 
     res.status(200).json({
         success: true,
-        posts: posts, // (بنرجع البوستات اللي الـ populate جهزها)
+        posts,
         currentPage: page,
-        totalPages: Math.ceil(await Post.countDocuments({ user: { $nin: excludeIds } }) / limit) // (تحسين) بنرجع عدد الصفحات
+        totalPages: Math.ceil(totalPosts / limit),
+        hasMore: totalPosts > skip + posts.length
     });
 });
 
@@ -202,69 +249,240 @@ export const getPostsFeed = expressAsyncHandler(async (req, res) => {
 export const getPostById = expressAsyncHandler(async (req, res) => {
     const { id } = req.params;
 
-    const post = await Post.findById(id);
-
-    if (!post) {
-        res.status(404);
-        throw new Error("Post not found.");
+    // تأكد إن فيه auth، لو مفيش اعتبره زائر (لأن الراوت Public/Private)
+    let viewerMongoId = null;
+    if (req.auth) {
+        const { userId: clerkId } = req.auth();
+        const viewer = await User.findOne({ clerkId });
+        viewerMongoId = viewer?._id;
     }
 
-    // بنستخدم الـ Helper بتاعنا عشان يجيب بيانات اليوزر والكومنتات
-    // (Helper ده عبقري لإنه بيحل مشكلة N+1 في الكومنتات)
-    const postWithData = await populatePostData(post);
+    // 1. هات البوست
+    // استخدام .lean() مهم جداً عشان نقدر نعدل في الداتا براحتنا
+    let post = await Post.findById(id)
+        .populate("user", "full_name username profile_picture isPrivate isVerified blockedUsers")
+        // 👇 التعديل هنا: بنعمل populate للكومنتات واليوزر اللي جواها
+        .populate({
+            path: "comments",
+            populate: { path: "user", select: "full_name username profile_picture" }
+        })
+        .lean();
 
-    res.status(200).json({
-        success: true,
-        post: postWithData
-    });
+    if (!post) { res.status(404); throw new Error("Post not found."); }
+
+    // =========================================================
+    // 🔥🔥 الحل السحري لمشكلة الـ Key (Deduplication) 🔥🔥
+    // =========================================================
+    if (post.comments && Array.isArray(post.comments)) {
+        const uniqueComments = [];
+        const seenIds = new Set();
+
+        post.comments.forEach(comment => {
+            // نتأكد إن الكومنت موجود وليه ID (عشان لو فيه nulls في الداتابيز)
+            if (comment && comment._id) {
+                const idStr = comment._id.toString();
+                // لو مشوفناش الـ ID ده قبل كده، ضيفه
+                if (!seenIds.has(idStr)) {
+                    seenIds.add(idStr);
+                    uniqueComments.push(comment);
+                }
+            }
+        });
+
+        // استبدل القائمة القديمة بالقائمة النظيفة
+        post.comments = uniqueComments;
+    }
+    // =========================================================
+
+    // 🔒 2. Privacy Check
+    // (لازم نتأكد إن post.user موجود عشان الـ lean ممكن يخليه null لو فيه مشكلة في الـ populate)
+    if (post.user && post.user.isPrivate) {
+        const isOwner = viewerMongoId && post.user._id.toString() === viewerMongoId.toString();
+        // لازم تجيب الـ viewer كامل لو عايز تتشك على الـ following، بس هنا هنفترض إنك بتعديها
+        // أو ممكن تعمل كويري بسيط تشوف هل أنا بتابعه
+
+        if (!isOwner && viewerMongoId) {
+            const viewerData = await User.findById(viewerMongoId).select('following');
+            const isFollowing = viewerData?.following?.includes(post.user._id);
+
+            if (!isFollowing) {
+                res.status(403); throw new Error("This post is from a private account.");
+            }
+        }
+    }
+
+    // 🔥🔥🔥 التعديل هنا لتوحيد منطق الستوريز 🔥🔥🔥
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const stories = await Story.find({
+        user: post.user._id,
+        createdAt: { $gte: twentyFourHoursAgo }
+    })
+        .populate("user", "full_name username profile_picture") // 👈 (مهم) لازم populate هنا
+        .lean();
+
+    if (post.user) {
+        post.user.stories = stories.map(s => ({
+            ...s,
+            seen: s.viewers ? s.viewers.some(v => {
+                const viewerId = v.user ? v.user.toString() : v.toString();
+                return viewerMongoId && viewerId === viewerMongoId;
+            }) : false
+        }));
+    }
+
+    res.status(200).json({ success: true, post });
 });
 
 
 /**----------------------------------------------
- * @desc Get User By ID (Profile Page)
+ * @desc Get User By ID (Updated Logic 🚀)
  * @route /api/post/user/:userId
  * @method GET
- * @access Public
+ * @access Public/Private
 --------------------------------------------------*/
 export const getUserById = expressAsyncHandler(async (req, res) => {
     const { userId } = req.params;
+    let { userId: myClerkId } = req.auth();
 
-    // (تصليح 1 & 2) - صلحنا الكويري وحددنا الحقول المطلوبة فقط
-    const user = await User.findById(userId) // أو findOne({ clerkId: userId }) لو بتبعت clerkId
-        .select("-password -email -updatedAt") // (أمان) شيل البيانات الحساسة
-        .lean();
+    // 1. Target User
+    const targetUser = await User.findById(userId).select("-password -email").lean();
+    if (!targetUser) { res.status(404); throw new Error("User not found."); }
+    const targetUserIdStr = targetUser._id.toString();
 
-    if (!user) {
-        res.status(404);
-        throw new Error("User not found.");
+    // 2. Viewer User (Full Data)
+    const viewer = await User.findOne({ clerkId: myClerkId })
+        .select("connections pendingRequests sentRequests blockedUsers following followRequests"); // زودنا following/followRequests
+
+    const viewerMongoId = viewer?._id.toString();
+
+    // =========================================================
+    // 🛡️ المنطقة العازلة (Block Logic)
+    // =========================================================
+    if (viewer && viewerMongoId !== targetUserIdStr) {
+        const isBlockedByMe = viewer.blockedUsers?.some(id => id.toString() === targetUserIdStr);
+        const isBlockedByTarget = targetUser.blockedUsers?.some(id => id.toString() === viewerMongoId);
+
+        if (isBlockedByMe || isBlockedByTarget) {
+            return res.status(200).json({
+                success: true,
+                user: {
+                    _id: targetUser._id,
+                    full_name: isBlockedByMe ? targetUser.full_name : "User Unavailable",
+                    username: isBlockedByMe ? targetUser.username : "unavailable",
+                    profile_picture: isBlockedByMe ? targetUser.profile_picture : "/avatar-placeholder.png",
+                    bio: null,
+                    followers: [],
+                    following: [],
+                    isBlockedByMe,
+                    isBlockedByTarget,
+                },
+                posts: [],
+                connectionStatus: "none", // 👈 حالة افتراضية في البلوك
+                hasMore: false
+            });
+        }
     }
 
-    // (تحسين) - Pagination
+    // =========================================================
+    // 🔗 1. منطق الصداقة (Connection Logic Only) 🔗
+    // =========================================================
+    let connectionStatus = "none"; // (none, connected, sent, received, self)
+
+    if (viewer) {
+        if (viewerMongoId === targetUserIdStr) {
+            connectionStatus = "self";
+        }
+        else if (viewer.connections?.some(id => id.toString() === targetUserIdStr)) {
+            connectionStatus = "connected";
+        }
+        // هل جالي طلب صداقة منه؟ (نشوف الـ Pending بتوعي)
+        else if (viewer.pendingRequests?.some(id => id.toString() === targetUserIdStr)) {
+            connectionStatus = "received";
+        }
+        // هل أنا بعت طلب صداقة؟ (نشوف الـ Pending بتوعه هو، عشان نضمن إنه صداقة)
+        else if (targetUser.pendingRequests?.some(id => id.toString() === viewerMongoId)) {
+            connectionStatus = "sent";
+        }
+    }
+
+    // =========================================================
+    // 👣 2. منطق المتابعة (Follow Logic Only) 👣
+    // =========================================================
+    let followStatus = "none"; // (none, following, requested, self)
+
+    if (viewer && viewerMongoId !== targetUserIdStr) {
+        // هل أنا بتابعه؟
+        if (viewer.following?.some(id => id.toString() === targetUserIdStr)) {
+            followStatus = "following";
+        }
+        // هل أنا باعت طلب متابعة؟ (للحساب الخاص)
+        // بنشوف في الـ followRequests بتوعه هو
+        else if (targetUser.followRequests?.some(id => id.toString() === viewerMongoId)) {
+            followStatus = "requested";
+        }
+    }
+
+    // =========================================================
+    // 📸 منطق الستوريز
+    // =========================================================
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const activeStories = await Story.find({
+        user: targetUser._id,
+        createdAt: { $gte: twentyFourHoursAgo }
+    })
+        .populate("user", "full_name username profile_picture")
+        .lean();
+
+    targetUser.stories = activeStories.map(story => {
+        if (!viewer) return { ...story, seen: false };
+
+        const viewersList = story.viewers || [];
+        const isSeen = viewersList.some(v => {
+            const viewerIdToCheck = v.user ? v.user.toString() : v.toString();
+            return viewerIdToCheck === viewerMongoId;
+        });
+
+        return { ...story, seen: isSeen };
+    });
+
+    targetUser.hasActiveStory = activeStories.length > 0;
+
+    // =========================================================
+    // 🦅 منطق البوستات
+    // =========================================================
+    const isOwner = viewerMongoId === targetUserIdStr;
+    let postQuery = { user: targetUser._id };
+
+    if (!isOwner) {
+        postQuery.$or = [
+            { isHidden: false },
+            { isHidden: { $exists: false } }
+        ];
+    }
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    // (كويري البوستات)
-    const posts = await Post.find({ user: user._id })
+    const posts = await Post.find(postQuery)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        // (تحسين 3) - مش هنعمل populate لـ user هنا، لإنه معانا أصلاً
-        .populate('comments.user', 'full_name username profile_picture') // نجيب بس أصحاب الكومنتات
+        .populate('user', 'full_name username profile_picture isVerified isPrivate')
+        .populate('comments.user', 'full_name username profile_picture')
         .lean();
 
-    // (تحسين 3 - الذكاء كله هنا) 🧠
-    // بدل ما نلف ونعمل كويري لكل بوست عشان نجيب صاحبه، بنركب اليوزر اللي جبناه فوق
-    const postsWithUserData = posts.map(post => ({
-        ...post,
-        user: user // ركبنا أوبجكت اليوزر (اللي جبناه في أول سطر) جوه البوست
-    }));
-
+    // =========================================================
+    // 🚀 الإرسال النهائي
+    // =========================================================
     res.status(200).json({
         success: true,
-        user, // بيانات البروفايل
-        posts: postsWithUserData, // البوستات بتاعته
-        hasMore: posts.length === limit // عشان الفرونت إند يعرف فيه تاني ولا لأ
+        user: { ...targetUser, isBlockedByMe: false, isBlockedByTarget: false },
+        posts, // المتغيرات دي معرفة تحت في كودك الأصلي
+        connectionStatus, // 👈 حالة الصداقة
+        followStatus,     // 👈 حالة المتابعة (الجديد)
+        hasMore: posts.length === limit
     });
 });
 
@@ -340,37 +558,37 @@ export const addPost = expressAsyncHandler(async (req, res) => {
  * @access Private
 --------------------------------------------------*/
 export const updatePost = expressAsyncHandler(async (req, res) => {
-    const { userId } = req.auth();
+    const { userId } = req.auth(); // ده الـ Clerk ID
     const { id } = req.params;
     const { content } = req.body;
 
-    // 1. هات البوست من الداتابيز
+    // 2. 👇 الخطوة الناقصة: هات اليوزر من الداتابيز باستخدام الـ Clerk ID
+    const currentUser = await User.findOne({ clerkId: userId });
+
+    if (!currentUser) {
+        res.status(401);
+        throw new Error("User not found in database");
+    }
+
+    // 3. هات البوست
     const post = await Post.findById(id);
 
-    // 2. أمان: اتأكد إنه موجود أصلاً
     if (!post) {
         res.status(404);
         throw new Error("Post not found.");
     }
 
-    // 3. (أهم نقطة أمنية 🛡️) Authorization Check
-    // هل اليوزر اللي باعت الطلب هو هو صاحب البوست؟
-    if (post.user.toString() !== userId) {
-        res.status(403); // 403 Forbidden (ممنوع)
+    // 4. 👇 المقارنة الصح: قارن الـ ID اللي في البوست بالـ ID بتاع اليوزر من الداتابيز
+    // (لازم toString عشان نضمن إننا بنقارن نصوص)
+    if (post.user.toString() !== currentUser._id.toString()) {
+        res.status(403);
         throw new Error("You are not authorized to update this post.");
     }
 
-    // 4. التعديل (بنعدل المحتوى النصي)
-    // لو مبعتش content جديد، خلي القديم زي ما هو
+    // 5. التعديل والحفظ
     post.content = content || post.content;
-
-    // (ملحوظة: تعديل الصور قصة تانية بتحتاج رفع ملفات ومسح القديم من imagekit)
-    // (عادة زرار Edit بيسمح بتعديل الكلام بس، وده الأسهل والأكثر شيوعاً)
-
-    // 5. سيف التغييرات
     const updatedPost = await post.save();
 
-    // 6. الرد
     res.status(200).json({
         success: true,
         message: "Post updated successfully.",
@@ -386,8 +604,16 @@ export const updatePost = expressAsyncHandler(async (req, res) => {
  * @access Private
 --------------------------------------------------*/
 export const deletePost = expressAsyncHandler(async (req, res) => {
-    const { userId } = req.auth();
-    const { id } = req.params; // ID البوست
+    const { userId } = req.auth(); // Clerk ID
+    const { id } = req.params;     // Post ID
+
+    // 1. نجيب اليوزر الحقيقي (عشان ناخد الـ _id بتاعه)
+    const currentUser = await User.findOne({ clerkId: userId });
+
+    if (!currentUser) {
+        res.status(404);
+        throw new Error("User not found.");
+    }
 
     const post = await Post.findById(id);
 
@@ -396,9 +622,10 @@ export const deletePost = expressAsyncHandler(async (req, res) => {
         throw new Error("Post not found.");
     }
 
-    // (Check Ownership) - تأكد إن ده صاحب البوست
-    if (post.user.toString() !== userId) {
-        res.status(403); // 403 Forbidden
+    // 🔥🔥🔥 التصحيح هنا 🔥🔥🔥
+    // قارن صاحب البوست بـ currentUser._id (مش userId بتاع Clerk)
+    if (post.user.toString() !== currentUser._id.toString()) {
+        res.status(403);
         throw new Error("You are not authorized to delete this post.");
     }
 
@@ -494,54 +721,60 @@ export const likeUnlikePost = expressAsyncHandler(async (req, res) => {
  * @method POST
  * @access Private
 --------------------------------------------------*/
-export const addCommentToPost = expressAsyncHandler(async (req, res) => {
+export const addComment = expressAsyncHandler(async (req, res) => {
     const { userId } = req.auth();
     const { postId } = req.params;
-    const { text } = req.body;
+    const { text, parentId } = req.body;
 
     if (!text || text.trim().length === 0) {
         res.status(400);
         throw new Error("Comment text is required.");
     }
 
-    const post = await Post.findById(postId);
+    const currentUser = await User.findOne({ clerkId: userId });
+    if (!currentUser) {
+        res.status(404);
+        throw new Error("User not found.");
+    }
 
+    const post = await Post.findById(postId);
     if (!post) {
         res.status(404);
         throw new Error("Post not found.");
     }
 
-    // 1. نكريت الكومنت
-    const newComment = await Comment.create({
+    // إنشاء الكومنت
+    let newComment = await Comment.create({
+        user: currentUser._id,
         post: postId,
-        user: userId,
-        text: text,
+        text,
+        parentId: parentId || null
     });
 
-    // 2. نضيفه للبوست (بنسيف الـ ID بس عشان الداتابيز متتقلش)
-    // (تأكد إن الموديل بتاع Post الـ comments فيه type: ObjectId)
-    post.comments.unshift(newComment._id);
-    await post.save();
+    newComment = await newComment.populate("user", "username full_name profile_picture");
+    await Post.findByIdAndUpdate(postId, { $push: { comments: newComment._id } });
 
-    // 3. (الخطوة الـ Premium) 🌟
-    // لازم نجيب بيانات اليوزر عشان الفرونت يعرض الكومنت فوراً بصورته واسمه
-    // بنعمل "Populate يدوي" سريع
-    const commentUser = await User.findById(userId)
-        .select("full_name username profile_picture")
-        .lean();
-
-    // بنركب اليوزر جوه الكومنت عشان يرجع كامل
-    const commentToReturn = {
-        ...newComment.toObject(),
-        user: commentUser
-    };
-
-    // (هنا مكان الإشعار لو حبيت تضيفه)
+    // 🔥🔥🔥 إضافة الإشعار (Notification Logic) 🔥🔥🔥
+    if (post.user.toString() !== currentUser._id.toString()) {
+        try {
+            await Notification.create({
+                recipient: post.user,    // صاحب البوست
+                sender: currentUser._id, // أنا (اللي كتبت الكومنت)
+                type: 'comment',         // نوع الإشعار
+                // 👇 التعديل هنا: لو فيه parentId يبقى ده 'reply'، لو مفيش يبقى 'comment'
+                type: parentId ? 'reply' : 'comment',
+                post: post._id,          // البوست
+                commentId: newComment._id // الكومنت نفسه
+            });
+        } catch (error) {
+            console.log("Notification Error (Comment):", error.message);
+        }
+    }
 
     res.status(201).json({
         success: true,
-        message: "Comment added successfully.",
-        comment: commentToReturn // (تصليح الباج) بنرجع الكومنت الجديد بالبيانات
+        message: parentId ? "Reply added successfully" : "Comment added successfully",
+        comment: newComment
     });
 });
 
@@ -556,6 +789,12 @@ export const updateComment = expressAsyncHandler(async (req, res) => {
     const { userId } = req.auth();
     const { commentId } = req.params;
     const { text } = req.body;
+
+    const currentUser = await User.findOne({ clerkId: userId });
+    if (!currentUser) {
+        res.status(404);
+        throw new Error("User not found via Clerk ID");
+    }
 
     // validation بسيط
     if (!text || text.trim().length === 0) {
@@ -572,13 +811,14 @@ export const updateComment = expressAsyncHandler(async (req, res) => {
 
     // 3. (Security Check 🛡️)
     // التعديل مسموح لصاحب الكومنت "فقط"
-    if (comment.user.toString() !== userId) {
+    if (comment.user.toString() !== currentUser._id.toString()) {
         res.status(403);
         throw new Error("You are not authorized to update this comment.");
     }
 
     // 4. التعديل والحفظ
     comment.text = text;
+    comment.isEdited = true; // 👈 ضيف السطر ده عشان نعلم عليه
     await comment.save();
 
     // (اختياري) ممكن تعمل populate وترجعه تاني عشان لو الفرونت محتاج يحدثه فوراً
@@ -593,54 +833,77 @@ export const updateComment = expressAsyncHandler(async (req, res) => {
 
 
 /**----------------------------------------------
- * @desc Delete Comment
+ * @desc Delete Comment (Cascade Delete 🌳)
  * @route /api/post/comment/:commentId
  * @method DELETE
  * @access Private
 --------------------------------------------------*/
+// 1️⃣ دالة مساعدة تجيب كل عيال الكومنت وعيال عياله (Recursion)
+const getRecursiveCommentIds = async (commentId) => {
+    // هات كل الكومنتات اللي الـ parentId بتاعها هو الكومنت ده
+    const children = await Comment.find({ parentId: commentId });
+
+    let ids = [];
+
+    // لكل طفل، هات عياله هو كمان
+    for (const child of children) {
+        ids.push(child._id); // ضيف الطفل ده
+        const grandChildrenIds = await getRecursiveCommentIds(child._id); // هات أحفاده
+        ids = [...ids, ...grandChildrenIds]; // ضيف الأحفاد
+    }
+
+    return ids;
+};
+
 export const deleteComment = expressAsyncHandler(async (req, res) => {
     const { userId } = req.auth();
     const { commentId } = req.params;
 
-    // 1. هات الكومنت عشان نتأكد إنه موجود ونعرف مين صاحبه
+    // 1. هات اليوزر
+    const currentUser = await User.findOne({ clerkId: userId });
+    if (!currentUser) { res.status(404); throw new Error("User not found."); }
+
+    // 2. هات الكومنت المستهدف
     const comment = await Comment.findById(commentId);
+    if (!comment) { res.status(404); throw new Error("Comment not found."); }
 
-    if (!comment) {
-        res.status(404);
-        throw new Error("Comment not found.");
-    }
-
-    // 2. هات البوست عشان نعرف مين صاحبه (لإن صاحب البوست من حقه يمسح برضه)
+    // 3. هات البوست المرتبط
     const post = await Post.findById(comment.post);
+    if (!post) { res.status(404); throw new Error("Post not found."); }
 
-    if (!post) {
-        // حالة نادرة جداً إن الكومنت يكون موجود والبوست ممسوح، بس للأمان
-        res.status(404);
-        throw new Error("Post associated with this comment not found.");
-    }
-
-    // 3. (Premium Security Check 🛡️)
-    // هل أنت صاحب الكومنت؟ أو أنت صاحب البوست؟
-    const isCommentOwner = comment.user.toString() === userId;
-    const isPostOwner = post.user.toString() === userId;
+    // 4. (Security Check)
+    const isCommentOwner = comment.user.toString() === currentUser._id.toString();
+    const isPostOwner = post.user.toString() === currentUser._id.toString();
 
     if (!isCommentOwner && !isPostOwner) {
         res.status(403);
         throw new Error("You are not authorized to delete this comment.");
     }
 
-    // 4. امسح الكومنت من كولكشن الكومنتات
-    await Comment.findByIdAndDelete(commentId);
+    // =========================================================
+    // 🔥🔥 العملية الجراحية (Cascade Delete) 🔥🔥
+    // =========================================================
 
-    // 5. (خطوة مهمة) شيل الـ ID بتاعه من مصفوفة الكومنتات جوه البوست
-    // بنستخدم $pull عشان نسحبه من المصفوفة
+    // أ) هات قائمة بكل العيال والأحفاد اللي محتاجين يتمسحوا
+    const childrenIds = await getRecursiveCommentIds(commentId);
+
+    // ب) ضيف عليهم الكومنت الأصلي نفسه (الأب)
+    const allIdsToDelete = [comment._id, ...childrenIds];
+
+    // ج) امسحهم كلهم من كولكشن الكومنتات مرة واحدة
+    await Comment.deleteMany({
+        _id: { $in: allIdsToDelete }
+    });
+
+    // د) شيلهم كلهم من مصفوفة البوست (عشان العداد يظبط)
     await Post.findByIdAndUpdate(comment.post, {
-        $pull: { comments: commentId }
+        $pull: { comments: { $in: allIdsToDelete } }
     });
 
     res.status(200).json({
         success: true,
-        message: "Comment deleted successfully."
+        message: `Comment and ${childrenIds.length} replies deleted successfully.`,
+        deletedCount: allIdsToDelete.length // (اختياري) عرف الفرونت مسحنا كام واحد
     });
 });
 
@@ -655,30 +918,36 @@ export const toggleCommentLike = expressAsyncHandler(async (req, res) => {
     const { userId } = req.auth();
     const { commentId } = req.params;
 
-    const comment = await Comment.findById(commentId);
+    // 1. هات اليوزر صاحب الطلب
+    const currentUser = await User.findOne({ clerkId: userId });
+    if (!currentUser) {
+        res.status(404);
+        throw new Error("User not found via Clerk ID");
+    }
 
+    // 2. هات الكومنت
+    const comment = await Comment.findById(commentId);
     if (!comment) {
         res.status(404);
         throw new Error("Comment not found.");
     }
 
-    // تأكد إن الموديل بتاع Comment فيه: likes: [{type: ObjectId, ref: "User"}]
-    // لو مصفوفة الـ likes مش موجودة (لأمان الكود)
+    // 3. تأكد إن المصفوفة موجودة
     if (!comment.likes) {
         comment.likes = [];
     }
 
-    const isLiked = comment.likes.includes(userId);
+    // 👇👇👇 التعديل الجوهري هنا 👇👇👇
+    // لازم نقارن ID بـ ID ونحولهم لنصوص
+    const userIdStr = currentUser._id.toString();
+    const isLiked = comment.likes.some(id => id.toString() === userIdStr);
 
     if (isLiked) {
-        // لو عامل لايك -> شيله
-        comment.likes.pull(userId);
+        // لو عامل لايك -> شيله (Filter)
+        comment.likes = comment.likes.filter(id => id.toString() !== userIdStr);
     } else {
-        // لو مش عامل -> ضيفه
-        comment.likes.push(userId);
-
-        // (Premium Step) - ابعت إشعار لصاحب الكومنت
-        // if (comment.user.toString() !== userId) { ... }
+        // لو مش عامل -> ضيف الـ ID بس (مش اليوزر كله)
+        comment.likes.push(currentUser._id);
     }
 
     await comment.save();
@@ -692,57 +961,221 @@ export const toggleCommentLike = expressAsyncHandler(async (req, res) => {
 
 
 /**----------------------------------------------
- * @desc Reply to a Comment
- * @route /api/post/comment/reply/:commentId
+ * @desc Share Post
+ * @route /api/post/share/:id
  * @method POST
  * @access Private
 --------------------------------------------------*/
-export const addReplyToComment = expressAsyncHandler(async (req, res) => {
+export const sharePost = expressAsyncHandler(async (req, res) => {
+    const { id } = req.params;
     const { userId } = req.auth();
-    const { commentId } = req.params;
-    const { text } = req.body;
 
-    if (!text || text.trim().length === 0) {
-        res.status(400);
-        throw new Error("Reply text is required.");
-    }
-
-    // 1. هات الكومنت الأصلي
-    const comment = await Comment.findById(commentId);
-
-    if (!comment) {
+    const currentUser = await User.findOne({ clerkId: userId });
+    if (!currentUser) {
         res.status(404);
-        throw new Error("Comment not found.");
+        throw new Error("User not found via Clerk ID");
     }
 
-    // 2. جهز الرد
-    const newReply = {
-        user: userId,
-        text: text,
-        createdAt: new Date()
+    const post = await Post.findById(id);
+    if (!post) {
+        res.status(404);
+        throw new Error("Post not found");
+    }
+
+    const updatedPost = await Post.findByIdAndUpdate(
+        id,
+        { $push: { shares: currentUser._id } },
+        { new: true }
+    );
+
+    // 🔥🔥🔥 إضافة الإشعار (Notification Logic) 🔥🔥🔥
+    if (post.user.toString() !== currentUser._id.toString()) {
+        try {
+            await Notification.create({
+                recipient: post.user,    // صاحب البوست
+                sender: currentUser._id, // أنا (اللي عملت شير)
+                type: 'share',           // نوع الإشعار
+                post: post._id           // البوست
+            });
+        } catch (error) {
+            console.log("Notification Error (Share):", error.message);
+        }
+    }
+
+    res.status(200).json(updatedPost);
+});
+
+
+/**----------------------------------------------
+ * @desc Save Post
+ * @route /api/post/save/:id
+ * @method PUT
+ * @access Private
+--------------------------------------------------*/
+export const togglePostSave = expressAsyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { userId } = req.auth();
+
+    const currentUser = await User.findOne({ clerkId: userId });
+    if (!currentUser) {
+        res.status(404);
+        throw new Error("User not found via Clerk ID");
+    }
+
+    const post = await Post.findById(id);
+    if (!post) {
+        res.status(404);
+        throw new Error("Post not found");
+    }
+
+    const isSaved = post.saves.includes(currentUser._id);
+
+    if (isSaved) {
+        post.saves.pull(currentUser._id);
+    } else {
+        post.saves.push(currentUser._id);
+    }
+
+    await post.save();
+
+    res.status(200).json({
+        success: true,
+        message: isSaved ? "Post unsaved successfully" : "Post saved successfully",
+        saves: post.saves,
+        saves_count: post.saves.length
+    });
+});
+
+
+/**----------------------------------------------
+ * @desc Get Saved Posts
+ * @route /api/post/saved
+ * @method GET
+ * @access Private
+--------------------------------------------------*/
+export const getSavedPosts = expressAsyncHandler(async (req, res) => {
+    const { userId } = req.auth(); // Clerk ID
+
+    // 1. نجيب اليوزر الحقيقي
+    const currentUser = await User.findOne({ clerkId: userId });
+    if (!currentUser) {
+        res.status(404);
+        throw new Error("User not found.");
+    }
+
+    // 2. Pagination (عشان لو حافظ 1000 بوست الصفحة متموتش)
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // 3. الكويري السحري: هات البوستات اللي أنا موجود في قائمة الـ saves بتاعتها
+    // ونستبعد البوستات المخفية (Moderation)
+    const query = {
+        saves: currentUser._id,
+        $or: [
+            { isHidden: false },
+            { isHidden: { $exists: false } }
+        ]
     };
 
-    // 3. ضيف الرد في مصفوفة الردود
-    comment.replies.push(newReply);
-    await comment.save();
-
-    // 4. (Premium Step) 🌟
-    // لازم نرجع الرد "كامل" (ببيانات اليوزر) عشان الفرونت يعرضه
-    // بس عشان الرد جوه مصفوفة، الـ populate العادي مش هينفع هنا بسهولة
-    // فبنعمل "خدعة" بسيطة: بنجيب بيانات اليوزر ونركبها يدوي للرد اللي راجع
-
-    const replyUser = await User.findById(userId)
-        .select("full_name username profile_picture")
+    // 4. تنفيذ البحث
+    let posts = await Post.find(query)
+        .sort({ createdAt: -1 }) // الأحدث إنشاءً (ممكن تغيرها لآخر حاجة اتحفظت لو غيرت السكيما)
+        .skip(skip)
+        .limit(limit)
+        .populate('user', 'full_name username profile_picture isPrivate isVerified')
+        .populate('comments.user', 'full_name username profile_picture')
         .lean();
 
-    const replyToReturn = {
-        ...newReply,
-        user: replyUser
-    };
+    // 5. (Consistency) 🔥 نضيف منطق الستوريز عشان الشكل يبقى موحد مع الفيد
+    // (نسخ لصق من لوجيك getPostsFeed عشان الاحترافية)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const userIdsInFeed = posts.map(p => p.user._id);
 
-    res.status(201).json({
-        success: true,
-        message: "Reply added successfully.",
-        reply: replyToReturn
+    const activeStories = await Story.find({
+        user: { $in: userIdsInFeed },
+        createdAt: { $gte: twentyFourHoursAgo }
+    }).lean();
+
+    posts = posts.map(post => {
+        const userStories = activeStories.filter(s => s.user.toString() === post.user._id.toString());
+        const storiesWithSeenStatus = userStories.map(s => ({
+            ...s,
+            seen: s.viewers ? s.viewers.some(v => v.toString() === currentUser._id.toString()) : false
+        }));
+
+        return {
+            ...post,
+            user: {
+                ...post.user,
+                stories: storiesWithSeenStatus,
+                hasActiveStory: userStories.length > 0
+            }
+        };
     });
+
+    // 6. الإحصائيات للـ Pagination
+    const totalPosts = await Post.countDocuments(query);
+
+    res.status(200).json({
+        success: true,
+        posts,
+        currentPage: page,
+        totalPages: Math.ceil(totalPosts / limit),
+        hasMore: totalPosts > skip + posts.length
+    });
+});
+
+
+/**----------------------------------------------
+ * @desc Report a Post
+ * @route /api/post/report/:id
+ * @method POST
+ * @access Private
+--------------------------------------------------*/
+export const reportPost = expressAsyncHandler(async (req, res) => {
+    const { id: postId } = req.params;
+    const { userId } = req.auth();
+    const { reason } = req.body; // السبب هيجي من الفرونت
+
+    const currentUser = await User.findOne({ clerkId: userId });
+    if (!currentUser) {
+        res.status(404);
+        throw new Error("User not found via Clerk ID");
+    }
+
+
+    // 1. تأكد إن البوست موجود
+    const post = await Post.findById(postId);
+    if (!post) { res.status(404); throw new Error("Post not found"); }
+
+    // 2. تأكد إن اليوزر مبلغش عن نفس البوست ده قبل كده (عشان Spam Reports)
+    const existingReport = await Report.findOne({ reporter: currentUser, targetPost: postId });
+    if (existingReport) {
+        res.status(400);
+        throw new Error("You have already reported this post");
+    }
+
+    // 3. إنشاء البلاغ
+    await Report.create({
+        reporter: currentUser,
+        targetPost: postId,
+        reason: reason || "Other"
+    });
+
+    // 👇👇👇 اللوجيك الجديد: عداد العقاب 👇👇👇
+
+    // 2. عد كل الريبورتات اللي معمولة على البوست ده
+    const reportCount = await Report.countDocuments({ targetPost: postId });
+
+    // 3. حدد "رقم الخطر" (Threshold) - خليه 5 مثلاً
+    const REPORT_THRESHOLD = 5;
+
+    if (reportCount >= REPORT_THRESHOLD) {
+        // 4. تنفيذ الحكم: إخفاء البوست
+        await Post.findByIdAndUpdate(postId, { isHidden: true });
+        console.log(`🚨 Auto-Moderation: Post ${postId} hidden due to high reports.`);
+    }
+
+    res.status(201).json({ success: true, message: "Report submitted. Thank you for making our community safer." });
 });

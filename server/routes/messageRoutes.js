@@ -5,41 +5,42 @@ import {
     sendMessage,
     getChatMessages,
     getRecentMessages,
-    sseController
+    sseController,
+    markMessagesAsRead,
+    deleteConversation,
+    reactToMessage
 } from '../controllers/messageController.js';
 
 const messageRouter = express.Router();
 
 // ==================================================
-// 1. الـ Real-time (SSE Stream) 📡
+// 1. الروابط الثابتة والـ Stream (لازم تيجي في الأول) ⚠️
 // ==================================================
 
-// فتح خط الاتصال المباشر
-// (غيرنا المسار لـ /stream/:userId عشان يبقى أوضح ومنظم)
+// SSE Stream
 messageRouter.get("/stream/:userId", sseController);
 
-
-// ==================================================
-// 2. الروابط الثابتة (Static Routes) - لازم في الأول ⚠️
-// ==================================================
-
-// جلب قائمة المحادثات (آخر الرسايل)
-// (تصليح 1: خليناها GET لأننا بنجيب داتا مش بنبعت داتا)
+// آخر الرسايل (Recent) - لازم قبل الـ ID عشان ميفهمش كلمة recent إنها ID
 messageRouter.get('/recent', protect, getRecentMessages);
 
-// إرسال رسالة جديدة
-// (تصليح 2: protect الأول "أمان"، وبعدين upload "أداء")
+// إرسال رسالة
 messageRouter.post('/send', protect, upload.single('image'), sendMessage);
 
+// إضافة/تعديل/حذف ردة فعل على رسالة
+messageRouter.post("/react", protect, reactToMessage);
+
+// قراءة الرسايل (Read)
+messageRouter.put('/read/:senderId', protect, markMessagesAsRead);
 
 // ==================================================
-// 3. الروابط المتغيرة (Dynamic Routes)
+// 2. الروابط المتغيرة (Dynamic Routes) - لازم في الآخر ⚠️
 // ==================================================
 
-// جلب رسايل الشات بيني وبين شخص معين
-// (تصليح 3: ضفنا :withUserId عشان الكنترولر يعرف احنا عايزين رسايل مين)
-messageRouter.get('/chat/:withUserId', protect, getChatMessages);
+// 👇 التعديل هنا: شيلنا كلمة /chat وبقت /:withUserId علطول
+// عشان تطابق الفرونت إند: api.get(`/message/${id}`)
+messageRouter.get('/:withUserId', protect, getChatMessages);
+
+messageRouter.delete("/conversation/:targetId", protect, deleteConversation);
 
 
-// 4. التصدير
 export default messageRouter;

@@ -4,8 +4,8 @@ const userSchema = new mongoose.Schema({
     clerkId: {
         type: String,
         required: true,
-        unique: true, // عشان ميتكررش
-        index: true   // عشان البحث بيه يبقى صاروخ
+        unique: true,
+        index: true
     },
     email: {
         type: String,
@@ -40,32 +40,60 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: ""
     },
+    isVerified: {
+        type: Boolean,
+        default: false
+    },
 
-    // (!! التحسين الأول: استخدمنا ref عشان نربط الكولكشن بنفسه !!)
-    followers: [
-        {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User" // ده بيشاور على الموديل اللي اسمه "User"
-        }
-    ],
-    following: [
-        {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User" // ده بيشاور على الموديل اللي اسمه "User"
-        }
-    ],
-    blockedUsers: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User"
-    }],
+    // --- إعدادات الخصوصية ---
+    isPrivate: {
+        type: Boolean,
+        default: false
+    },
+    hideOnlineStatus: {
+        type: Boolean,
+        default: false
+    },
 
-    // (!! التحسين التاني: شيلنا الباسورد لإن Clerk هو المسئول عنه !!)
-    // password: { ... }  <-- اتشال
+    // 👇👇👇 الجزء الجديد: إعدادات الإشعارات 👇👇👇
+    notificationSettings: {
+        email: {
+            type: Boolean,
+            default: true // الطبيعي إنها شغالة لحد ما هو يقفلها
+        },
+        push: {
+            type: Boolean,
+            default: true
+        }
+    },
+
+    // --- العلاقات (Connections & Follows) ---
+
+    // 1. الأصدقاء
+    connections: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+    // 2. طلبات الصداقة
+    pendingRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    sentRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // (تم دمج التكرار هنا)
+
+    // 3. المتابعة (Follow System)
+    followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    followRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+    // 4. الحظر والكتم
+    blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    mutedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User", default: [] }],
+
+    lastSeen: {
+        type: Date,
+        default: Date.now
+    }
 
 }, {
-    timestamps: true,  // هيضيف createdAt و updatedAt
+    timestamps: true,
 });
 
-const User = mongoose.model("User", userSchema);  // إنشاء الموديل
+const User = mongoose.model("User", userSchema);
 
-export default User; // <-- بنعمل "تصدير افتراضي"
+export default User;

@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // --- باقي الاستدعاءات ---
+import { app, server } from "./socket/socket.js";
 import express from "express";
 import cors from "cors";
 import connectDB from "./configs/db.js";
@@ -17,14 +18,19 @@ import userRouter from "./routes/userRoutes.js";
 import storyRouter from "./routes/storyRoutes.js";
 import messageRouter from "./routes/messageRoutes.js";
 import notificationRouter from "./routes/notificationRoutes.js";
+import groupRouter from "./routes/groupRoutes.js";
 
-// إنشاء السيرفر
-const app = express();
 
 // ----------------------- Middlewares (الترتيب هنا مهم) -----------------------
 
+
+
 // 1. CORS: عشان نسمح للمواقع الخارجية (الفرونت إند) تكلمنا
-app.use(cors({ origin: "*" })); // ممكن تخليه * أو تحط رابط الفرونت إند
+app.use(cors({
+    origin: "http://localhost:5173", // 👈 لازم يكون رابط الفرونت بالظبط (بدون / في الآخر)
+    credentials: true, // 👈 دي اللي سببت المشكلة مع النجمة، بس احنا محتاجينها
+    methods: ["GET", "POST", "PUT", "DELETE"], // حدد الميثودز المسموحة
+}));
 
 // 2. JSON Parser: عشان السيرفر يفهم req.body
 app.use(express.json());
@@ -63,6 +69,7 @@ app.use("/api/post", postRouter);
 app.use("/api/story", storyRouter);
 app.use("/api/message", messageRouter);
 app.use("/api/notifications", notificationRouter);
+app.use("/api/group", groupRouter);
 
 // 6. رابط تجريبي عام (سليم)
 app.get("/", (req, res) => {
@@ -109,7 +116,7 @@ const startServer = async () => {
         await connectDB();
 
         // 2. لو الاتصال نجح، شغل السيرفر
-        app.listen(port, () => {
+        server.listen(port, () => {
             console.log(`Server is running on port : ${port}`);
         });
     } catch (error) {

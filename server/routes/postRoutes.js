@@ -2,7 +2,7 @@ import express from 'express';
 import { protect } from '../middlewares/auth.js';
 import upload from '../configs/multer.js';
 import {
-    addCommentToPost,
+    addComment,
     addPost,
     deletePost,      // (جديد)
     updatePost,      // (جديد)
@@ -11,7 +11,12 @@ import {
     getUserById,
     likeUnlikePost,
     deleteComment,   // (جديد)
-    toggleCommentLike // (جديد)
+    toggleCommentLike, // (جديد)
+    sharePost,
+    togglePostSave,
+    reportPost,
+    updateComment,
+    getSavedPosts
 } from '../controllers/postController.js';
 
 const postRouter = express.Router();
@@ -26,6 +31,7 @@ postRouter.post('/add', protect, upload.array('images', 5), addPost);
 // جلب الـ Feed (الصفحة الرئيسية)
 postRouter.get('/feed', protect, getPostsFeed);
 
+postRouter.get("/saved", protect, getSavedPosts);
 
 // ==================================================
 // 2. روابط التفاعل (Interactions)
@@ -37,7 +43,10 @@ postRouter.get('/feed', protect, getPostsFeed);
 postRouter.put("/like/:id", protect, likeUnlikePost);
 
 // إضافة كومنت
-postRouter.post("/comment/:postId", protect, addCommentToPost);
+postRouter.post("/comment/:postId", protect, addComment);
+
+// تعديل كومنت
+postRouter.put("/comment/:commentId", protect, updateComment);
 
 // مسح كومنت
 // (الرابط ده بيحتاج ID الكومنت نفسه)
@@ -57,11 +66,19 @@ postRouter.get("/user/:userId", protect, getUserById); // خليناها protect
 
 // --- عمليات البوست الواحد (CRUD) ---
 
+// شارك بوست
+postRouter.put("/share/:id", protect, sharePost);
+
+// حفظ بوست
+postRouter.put("/save/:id", protect, togglePostSave);
+
 // جلب بوست واحد (للتفاصيل)
 postRouter.get("/:id", protect, getPostById);
 
 // تعديل بوست
 postRouter.put("/:id", protect, updatePost);
+
+postRouter.post("/report/:id", protect, reportPost);
 
 // مسح بوست
 postRouter.delete("/:id", protect, deletePost);

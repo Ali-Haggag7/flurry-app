@@ -25,7 +25,8 @@
     "inngest": "^3.44.5",
     "mongoose": "^8.19.2",
     "multer": "^2.0.2",
-    "nodemailer": "^7.0.10"
+    "nodemailer": "^7.0.12",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

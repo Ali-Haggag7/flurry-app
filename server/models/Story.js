@@ -1,80 +1,68 @@
+// models/Story.js
+
 import mongoose from "mongoose";
 
 const storySchema = new mongoose.Schema({
-    // 1. صاحب الاستوري (أساسي)
     user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         required: true,
-        index: true // عشان نجيب استوريهات يوزر معين بسرعة
+        index: true
     },
-
-    // 2. المحتوى (للاستوري النصية أو وصف للصورة)
-    content: {
-        type: String,
-        trim: true,
-        default: ""
-    },
-
-    // 3. رابط الميديا (صورة أو فيديو)
-    image: {
-        type: String,
-        default: ""
-    },
-
-    // 4. (إضافة) نوع الاستوري
-    // عشان الفرونت إند يعرف يعرضها إزاي (يشغل فيديو ولا يعرض صورة)
+    content: { type: String, trim: true, default: "" },
+    image: { type: String, default: "" },
     type: {
         type: String,
-        enum: ["text", "image", "video"], // القيم المسموحة فقط
+        enum: ["text", "image", "video"],
         default: "text",
         required: true
     },
+    background_color: { type: String, default: "#000000" },
+    caption: { type: String, default: "" },
 
-    // 5. (إضافة) لون الخلفية
-    // مهمة جداً للاستوري الـ "text" عشان شكلها ميبقاش أبيض سادة
-    background_color: {
-        type: String,
-        default: "#000000" // أسود افتراضي
-    },
+    // 👇 التعديل الجذري: دمجنا المشاهدة والتفاعل في مكان واحد
+    viewers: [
+        {
+            user: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User",
+                required: true
+            },
+            viewedAt: {
+                type: Date,
+                default: Date.now
+            },
+            // 👇 التفاعل بقى جزء من بيانات المشاهدة
+            reaction: {
+                type: String,
+                default: null // لو مفيش تفاعل تبقى null
+            }
+        }
+    ],
 
-    // 6. (الحركة الصايعة 🔥: TTL Index)
-    // ده "تأمين" إضافي جنب Inngest.
-    // بنقول لمونجو: "لو عدى 24 ساعة (86400 ثانية) على الـ createdAt، امسحي الدوكيومنت دي أوتوماتيك"
-    // ده بيضمن إن الاستوري هتتمسح 100% حتى لو كود الـ Inngest مفهمش.
+    // ❌ شيلنا مصفوفة reactions المنفصلة عشان التكرار غلط
+
+    openedByOwnerAt: { type: Date, default: null },
+
     createdAt: {
         type: Date,
         default: Date.now,
-        expires: 86400 // 24 hours * 60 min * 60 sec
+        expires: 86400
     }
-
 }, {
-    timestamps: true // بيضيف updatedAt كمان
+    timestamps: true
 });
 
-
-// ========================================================
-// 🛡️ التحقق الذكي (Smart Validation)
-// ========================================================
-
+// Validation
 storySchema.pre("validate", function (next) {
-    // لو النوع text: لازم يكون فيه content
-    if (this.type === "text") {
-        if (!this.content || this.content.trim().length === 0) {
-            return next(new Error("Text story must have content."));
-        }
+    if (this.type === "text" && (!this.content || this.content.trim().length === 0)) {
+        return next(new Error("Text story must have content."));
     }
-
-    // لو النوع image أو video: لازم يكون فيه image url
-    if (this.type === "image" || this.type === "video") {
-        if (!this.image || this.image.trim().length === 0) {
-            return next(new Error("Image/Video story must have a media file."));
-        }
+    if ((this.type === "image" || this.type === "video") && (!this.image || this.image.trim().length === 0)) {
+        return next(new Error("Image/Video story must have a media file."));
     }
-
     next();
 });
 
 const Story = mongoose.model("Story", storySchema);
-
 export default Story;

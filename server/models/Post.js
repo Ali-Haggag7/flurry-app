@@ -30,6 +30,11 @@ const postSchema = new mongoose.Schema({
         default: "text"
     },
 
+    isHidden: {
+        type: Boolean,
+        default: false
+    },
+
     // 5. اللايكات (مصفوفة IDs للناس اللي عملت لايك)
     likes: [{
         type: mongoose.Schema.Types.ObjectId,
@@ -42,8 +47,18 @@ const postSchema = new mongoose.Schema({
     comments: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "Comment"
-    }]
+    }],
 
+    // 7. الشيرات
+    shares: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+    }],
+
+    saves: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+    }]
 }, {
     timestamps: true // بيضيف createdAt و updatedAt أوتوماتيك
 });

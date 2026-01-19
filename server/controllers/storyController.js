@@ -14,6 +14,7 @@ export const addStory = expressAsyncHandler(async (req, res) => {
     // 1. (التصليح المعتاد) - هنجيب اليوزر الحقيقي من الداتابيز
     const { userId: clerkId } = req.auth();
     const user = await User.findOne({ clerkId });
+    const caption = req.body.caption;
 
     if (!user) {
         res.status(404);
@@ -68,6 +69,7 @@ export const addStory = expressAsyncHandler(async (req, res) => {
         image: mediaUrl, // (التزمنا باسم الموديل)
         type: type || "text",
         background_color: backgroundColor,
+        caption
     });
 
     // 6. (Inngest Magic ✨)
@@ -88,13 +90,12 @@ export const addStory = expressAsyncHandler(async (req, res) => {
 
 
 /**----------------------------------------------
- * @desc Get Stories Feed (Grouped by User)
+ * @desc Get Stories Feed (Sorted by Unseen First)
  * @route /api/story/feed
  * @method GET
  * @access Private
 --------------------------------------------------*/
 export const getStoriesFeed = expressAsyncHandler(async (req, res) => {
-    // 1. هات اليوزر الحالي (بـ Clerk ID)
     const { userId: clerkId } = req.auth();
     const user = await User.findOne({ clerkId });
 
@@ -103,120 +104,74 @@ export const getStoriesFeed = expressAsyncHandler(async (req, res) => {
         throw new Error("User not found.");
     }
 
-    // 2. حدد مين الناس اللي عايز تشوف استوريهاتهم
-    // (أنا + المتابعين + الكونكشنز)
-    const userIds = [
-        user._id,
-        ...(user.following || []),
-        ...(user.connections || [])
-    ];
+    // 1. 👇 هات قائمة المحظورين (عشان نفلترهم)
+    const blockedList = user.blockedUsers || [];
 
-    // 3. حدد الوقت (آخر 24 ساعة)
+    // 2. تصفية قائمة الأصدقاء والمتابعين (شيل منهم المحظورين)
+    // حولنا الـ ID لـ String عشان المقارنة تكون دقيقة في الفلتر
+    const userIds = [user._id, ...(user.following || []), ...(user.connections || [])]
+        .filter(id => !blockedList.some(blockedId => blockedId.toString() === id.toString()));
+
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // 4. (الوحش 🔥) Aggregation Pipeline
-    const stories = await Story.aggregate([
-        // المرحلة 1: الفلترة (Match)
-        {
-            $match: {
-                user: { $in: userIds },           // هات استوريهات الناس دي
-                createdAt: { $gt: twentyFourHoursAgo } // اللي لسه "حية" (أقل من 24 ساعة)
-            }
-        },
-
-        // المرحلة 2: الترتيب (Sort)
-        // بنرتب من الأقدم للأحدث (عشان الاستوري الأولى تظهر الأول)
-        { $sort: { createdAt: 1 } },
-
-        // المرحلة 3: التجميع (Group)
-        // دي أهم خطوة: بنلم الاستوريهات في مجموعات حسب اليوزر
-        {
-            $group: {
-                _id: "$user", // جمع بناءً على اليوزر ID
-                stories: { $push: "$$ROOT" }, // حط الاستوريهات كلها في مصفوفة اسمها stories
-                lastStoryTime: { $max: "$createdAt" } // هات تاريخ "أحدث" استوري (عشان نرتب الدوائر نفسها)
-            }
-        },
-
-        // المرحلة 4: هات بيانات اليوزر (Lookup)
-        // بما إننا جمعنا بـ _id (اللي هو اليوزر)، عايزين نجيب اسمه وصورته
-        {
-            $lookup: {
-                from: "users", // اسم الكولكشن في الداتابيز (بيكون جمع وصغير)
-                localField: "_id",
-                foreignField: "_id",
-                as: "userData"
-            }
-        },
-
-        // المرحلة 5: تنظيف الشكل (Project)
-        // الـ lookup بيرجع array، إحنا عايزين أوبجكت واحد، ونختار الحقول اللي عايزينها
-        {
-            $project: {
-                _id: 1,
-                stories: 1,
-                lastStoryTime: 1,
-                user: { $arrayElemAt: ["$userData", 0] } // خد أول عنصر من المصفوفة
-            }
-        },
-
-        // المرحلة 6: ترتيب الدوائر (Sort Circles)
-        // عايزين اليوزر اللي نزل استوري "أحدث" يظهر في أول الطابور (على الشمال)
-        { $sort: { lastStoryTime: -1 } }
-    ]);
-
-    // 5. (خطوة تجميلية للفرونت إند)
-    // ننظف بيانات اليوزر اللي راجعة (نختار الاسم والصورة بس)
-    const formattedStories = stories.map(group => ({
+    const rawStories = await Story.find({
         user: {
-            _id: group.user._id,
-            full_name: group.user.full_name,
-            username: group.user.username,
-            profile_picture: group.user.profile_picture,
+            $in: userIds,       // الناس اللي بتابعهم
+            $nin: blockedList   // 🛡️ زيادة تأكيد: استبعد أي حد في البلوك ليست
         },
-        stories: group.stories
-    }));
+        createdAt: { $gt: twentyFourHoursAgo }
+    })
+        .populate("user", "username full_name profile_picture")
+        .populate({
+            path: "viewers.user",
+            select: "username full_name profile_picture"
+        })
+        .sort({ createdAt: 1 })
+        .lean();
+
+    const groupedStories = {};
+    const currentUserIdStr = user._id.toString();
+
+    rawStories.forEach(story => {
+        if (!story.user) return; // أمان لو اليوزر ممسوح
+
+        const storyOwnerIdStr = story.user._id.toString();
+        const isOwner = storyOwnerIdStr === currentUserIdStr;
+
+        const isViewedByMe = isOwner
+            ? !!story.openedByOwnerAt
+            : story.viewers.some(v => v.user && v.user._id.toString() === currentUserIdStr);
+
+        story.isViewed = isViewedByMe;
+
+        if (!groupedStories[storyOwnerIdStr]) {
+            groupedStories[storyOwnerIdStr] = {
+                user: story.user,
+                stories: [],
+                hasUnseen: false,
+                lastStoryTime: story.createdAt
+            };
+        }
+
+        groupedStories[storyOwnerIdStr].stories.push(story);
+
+        if (new Date(story.createdAt) > new Date(groupedStories[storyOwnerIdStr].lastStoryTime)) {
+            groupedStories[storyOwnerIdStr].lastStoryTime = story.createdAt;
+        }
+
+        if (!story.isViewed) {
+            groupedStories[storyOwnerIdStr].hasUnseen = true;
+        }
+    });
+
+    const formattedStories = Object.values(groupedStories).sort((a, b) => {
+        if (a.hasUnseen !== b.hasUnseen) return a.hasUnseen ? -1 : 1;
+        return new Date(b.lastStoryTime) - new Date(a.lastStoryTime);
+    });
 
     res.status(200).json({
         success: true,
         stories: formattedStories
-    });
-});
-
-
-/**----------------------------------------------
- * @desc Delete a story (Manual)
- * @route /api/story/:id
- * @method DELETE
- * @access Private
---------------------------------------------------*/
-export const deleteStory = expressAsyncHandler(async (req, res) => {
-    const { userId } = req.auth();
-    const { id } = req.params; // ID الاستوري
-
-    // 1. هات الاستوري
-    const story = await Story.findById(id);
-
-    if (!story) {
-        res.status(404);
-        throw new Error("Story not found.");
-    }
-
-    // 2. (Security Check 🛡️) هل أنت صاحبها؟
-    if (story.user.toString() !== userId) {
-        res.status(403);
-        throw new Error("You are not authorized to delete this story.");
-    }
-
-    // 3. امسح من الداتابيز
-    await Story.findByIdAndDelete(id);
-
-    // (Premium Note): لو عايز تمسح الصورة من imagekit، لازم تكون مخزن fileId في الموديل
-    // لو مش مخزنه، مش مشكلة، المساحة بتشيل كتير.
-
-    res.status(200).json({
-        success: true,
-        message: "Story deleted successfully."
     });
 });
 
@@ -228,30 +183,259 @@ export const deleteStory = expressAsyncHandler(async (req, res) => {
  * @access Private
 --------------------------------------------------*/
 export const getUserStories = expressAsyncHandler(async (req, res) => {
-    const { userId: targetUserId } = req.params; // اليوزر اللي عايز اتفرج عليه
+    const { userId: targetUserId } = req.params;
 
-    // 1. نتأكد إن اليوزر ده موجود أصلاً
-    const user = await User.findById(targetUserId).select("_id full_name profile_picture");
+    // 1. تحديد المشاهد (أنت)
+    let viewerId = null;
+    if (req.auth) {
+        const { userId: clerkId } = req.auth();
+        const viewer = await User.findOne({ clerkId });
+        viewerId = viewer?._id.toString();
+    }
+
+    // 2. هات بيانات صاحب البروفايل
+    const user = await User.findById(targetUserId).select("_id full_name username profile_picture");
+    if (!user) {
+        res.status(404);
+        throw new Error("User not found.");
+    }
+
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // 3. هات الاستوريز واعمل Populate لبيانات صاحبها جواها
+    let stories = await Story.find({
+        user: targetUserId,
+        createdAt: { $gt: twentyFourHoursAgo }
+    })
+        .populate("user", "username full_name profile_picture") // 👈 مهم جداً عشان الاسم يظهر جوه البلاير
+        .sort({ createdAt: 1 })
+        .lean();
+
+    // 4. حساب الـ Seen بدقة متناهية
+    stories = stories.map(story => {
+        let isSeen = false;
+
+        if (viewerId) {
+            // لو أنا صاحب الاستوري
+            if (story.user._id.toString() === viewerId) {
+                isSeen = !!story.openedByOwnerAt;
+            } else {
+                // لو مشاهد عادي (كود آمن جداً للمقارنة)
+                isSeen = story.viewers && story.viewers.some(v => {
+                    if (!v) return false;
+                    // التعامل مع v سواء كان object أو id مباشر
+                    const idToCheck = v.user ? v.user : v;
+                    return idToCheck?.toString() === viewerId;
+                });
+            }
+        }
+
+        return {
+            ...story,
+            seen: isSeen,     // عشان الفرونت القديم
+            isViewed: isSeen  // عشان توحيد المسميات
+        };
+    });
+
+    res.status(200).json({
+        success: true,
+        user,
+        stories
+    });
+});
+
+
+/**----------------------------------------------
+ * @desc Mark story as viewed
+ * @route /api/story/:id/view
+ * @method PUT
+ * @access Private
+--------------------------------------------------*/
+export const viewStory = expressAsyncHandler(async (req, res) => {
+    const { userId: clerkId } = req.auth();
+    const { id } = req.params;
+
+    const user = await User.findOne({ clerkId });
+    if (!user) { res.status(404); throw new Error("User not found"); }
+
+    const story = await Story.findById(id);
+    if (!story) { res.status(404); throw new Error("Story not found"); }
+
+    const currentUserIdStr = user._id.toString();
+
+    // 🔥🔥🔥 1. عملية التنظيف الشاملة (Cleaning & Deduplication) 🔥🔥🔥
+    // دي هتحل مشكلة العداد (2) ومشكلة الـ ValidationError للأبد
+    let uniqueViewers = [];
+    const seenIds = new Set(); // بنستخدم Set عشان نضمن عدم تكرار أي ID
+
+    if (story.viewers && story.viewers.length > 0) {
+        for (const v of story.viewers) {
+            // أ) ارمي أي عنصر بايظ (مفهوش user) -> ده بيحل الـ ValidationError
+            if (!v || !v.user) continue;
+
+            const vId = v.user.toString();
+            // ب) لو الـ ID ده عدا علينا قبل كده، ارميه (منع التكرار)
+            if (!seenIds.has(vId)) {
+                seenIds.add(vId);
+                uniqueViewers.push(v);
+            }
+        }
+    }
+
+    // 🔥🔥🔥 2. إضافة المشاهدة الجديدة 🔥🔥🔥
+    // لو أنا مش صاحب الاستوري
+    if (story.user.toString() !== currentUserIdStr) {
+        // لو أنا مش موجود في القائمة النضيفة، ضيفني
+        if (!seenIds.has(currentUserIdStr)) {
+            uniqueViewers.push({
+                user: user._id,
+                viewedAt: new Date(),
+                reaction: null
+            });
+        }
+    } else {
+        // لو أنا صاحب الاستوري: حدث وقت الفتح فقط
+        if (!story.openedByOwnerAt) {
+            story.openedByOwnerAt = new Date();
+        }
+    }
+
+    // 3. حفظ القائمة النضيفة الجديدة
+    story.viewers = uniqueViewers;
+    await story.save();
+
+    res.status(200).json({ success: true });
+});
+
+
+/**----------------------------------------------
+ * @desc Delete a story (Manual)
+ * @route /api/story/:id
+ * @method DELETE
+ * @access Private
+--------------------------------------------------*/
+export const deleteStory = expressAsyncHandler(async (req, res) => {
+    const { userId: clerkId } = req.auth(); // 1. ده الـ Clerk ID
+    const { id } = req.params; // ID الاستوري
+
+    // 2. نجيب اليوزر الحقيقي من الداتابيز
+    const user = await User.findOne({ clerkId });
 
     if (!user) {
         res.status(404);
         throw new Error("User not found.");
     }
 
-    // 2. فلتر الوقت (آخر 24 ساعة)
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    // 3. هات الاستوري
+    const story = await Story.findById(id);
 
-    // 3. هات الاستوريهات
-    const stories = await Story.find({
-        user: targetUserId,
-        createdAt: { $gt: twentyFourHoursAgo } // أكبر من (بعد) امبارح في نفس المعاد
-    })
-        .sort({ createdAt: 1 }) // (مهم) ترتيب تصاعدي: أقدم واحدة تظهر الأول
-        .lean();
+    if (!story) {
+        res.status(404);
+        throw new Error("Story not found.");
+    }
+
+    // 4. (التصحيح هنا 🔥) نقارن الـ Mongo ID ببعض
+    if (story.user.toString() !== user._id.toString()) {
+        res.status(403);
+        throw new Error("You are not authorized to delete this story.");
+    }
+
+    // 5. امسح من الداتابيز
+    await Story.findByIdAndDelete(id);
 
     res.status(200).json({
         success: true,
-        user, // بيانات صاحبه (عشان نعرض اسمه وصورته فوق)
-        stories
+        message: "Story deleted successfully."
     });
+});
+
+
+/**----------------------------------------------
+ * @desc Mark all stories of a specific user as seen
+ * @route /api/story/mark-all-seen
+ * @method PUT
+ * @access Private
+--------------------------------------------------*/
+export const handleStoriesEnd = expressAsyncHandler(async (req, res) => {
+    // 1. استلام الـ ID بتاع صاحب الاستوريز من الرابط
+    const { targetUserId } = req.params;
+
+    // 2. استلام الـ ID بتاعك (المشاهد) من Clerk middleware
+    const { userId: viewerClerkId } = req.auth();
+
+    // 3. تحويل Clerk ID لـ Mongo ID (المشاهد)
+    const viewer = await User.findOne({ clerkId: viewerClerkId });
+    if (!viewer) {
+        res.status(404);
+        throw new Error("Viewer not found");
+    }
+
+    // 4. تحديث "كل" الاستوريز الحية بتاعة الـ targetUserId
+    // بنضيف الـ ID بتاعك في مصفوفة الـ viewers لو مش موجود
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    await Story.updateMany(
+        {
+            user: targetUserId,
+            createdAt: { $gte: twentyFourHoursAgo },
+            viewers: { $ne: viewer._id },
+            user: { $ne: viewer._id } // 👈 أهم سطر
+        },
+        {
+            $addToSet: { viewers: viewer._id }
+        }
+    );
+
+
+    res.status(200).json({
+        success: true,
+        message: "All stories marked as seen successfully"
+    });
+});
+
+
+/**----------------------------------------------
+ * @desc Toggle reaction
+ * @route /api/story/:storyId/react
+ * @method POST
+ * @access Private
+--------------------------------------------------*/
+export const toggleReaction = expressAsyncHandler(async (req, res) => {
+    const { storyId } = req.params;
+    const { emoji } = req.body;
+    const { userId: clerkId } = req.auth();
+
+    const user = await User.findOne({ clerkId });
+    if (!user) { res.status(404); throw new Error("User not found"); }
+
+    const story = await Story.findById(storyId);
+    if (!story) { res.status(404); throw new Error("Story not found"); }
+
+    // 🔥🔥 خطوة التنظيف الإجباري هنا كمان 🔥🔥
+    // لازم ننضف قبل ما نعمل save وإلا الـ Validation هيضرب بسبب البيانات القديمة
+    if (story.viewers && story.viewers.length > 0) {
+        story.viewers = story.viewers.filter(v => v && v.user);
+    }
+
+    const userIdStr = user._id.toString();
+    const viewerIndex = story.viewers.findIndex(v => v.user.toString() === userIdStr);
+
+    if (viewerIndex > -1) {
+        // ✅ موجود: عدل الرياكت
+        story.viewers[viewerIndex].reaction = emoji;
+        // بنعمل markModified عشان مونجوز يفهم إننا عدلنا جوه المصفوفة
+        story.markModified('viewers');
+    } else {
+        // 🆕 مش موجود: ضيفه جديد
+        story.viewers.push({
+            user: user._id,
+            viewedAt: new Date(),
+            reaction: emoji
+        });
+    }
+
+    // دلوقتي الـ save هينجح لأننا نضفنا العناصر البايظة فوق
+    await story.save();
+
+    res.status(200).json({ success: true, reaction: emoji });
 });

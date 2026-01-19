@@ -1,64 +1,44 @@
-// ===========================================
-// ملف: /routes/connectionRoutes.js
-// ===========================================
-
 import express from "express";
-
-// 1. "البواب" بتاعنا (بيحمي الروابط)
-// (هنجيب نفس البواب بتاع اليوزر)
 import { protect } from "../middlewares/auth.js";
-
-// 2. "المديرين" (الفانكشنز اللي هتشتغل)
-// (هنجيب المديرين الجداد بتوع الكونكشن)
 import {
     sendConnectionRequest,
     getUserConnections,
     acceptConnection,
+    rejectConnectionRequest,
     blockUser,
-    unblockUser
+    unblockUser,
+    removeConnection
 } from "../controllers/connectionController.js";
+import { followUser, unfollowUser } from "../controllers/userController.js";
+// (ملحوظة: لو لسه معملتش نقل لـ follow/unfollow للكنترولر ده، استوردهم من userController مؤقتاً)
 
-// 3. بننشئ الراوتر بتاعنا
 const connectionRouter = express.Router();
-
 
 // ============= (الروابط بتاعتنا) =============
 
-// 1. رابط عشان "أبعت" طلب صداقة
-// @desc Send Connection Request
-// @route /api/connection/send
-// @method POST
-// @access Private
+// 1. Send Request
 connectionRouter.post("/send", protect, sendConnectionRequest);
 
-// 2. رابط عشان "أجيب" كل علاقاتي (مين صحابي، مين باعتلي، الخ)
-// @desc Get User Connections
-// @route /api/connection/get
-// @method GET
-// @access Private
-connectionRouter.get("/get", protect, getUserConnections);
+// 2. 👇👇 التعديل هنا: شيلنا "/get" وخليناها "/" بس 👇👇
+// عشان الفرونت بينادي على /api/connection علطول
+connectionRouter.get("/", protect, getUserConnections);
 
-// 3. رابط عشان "أقبل" طلب صداقة
-// @desc Accept Connection Request
-// @route /api/connection/accept
-// @method POST
-// @access Private
-connectionRouter.post("/accept", protect, acceptConnection);
+// 3. Accept Request
+connectionRouter.post("/accept/:requestId", protect, acceptConnection);
 
-// 4. رابط عشان "أبلوك" يوزر
-// @desc Block User
-// @route /api/connection/block
-// @method POST
-// @access Private
-connectionRouter.post("/block", protect, blockUser);
+// 4. Reject Request
+connectionRouter.post("/reject/:id", protect, rejectConnectionRequest);
 
-// 5. رابط عشان "أنبلوك" يوزر
-// @desc Unblock User
-// @route /api/connection/unblock
-// @method POST
-// @access Private
-connectionRouter.post("/unblock", protect, unblockUser);
+connectionRouter.put("/remove/:userId", protect, removeConnection)
 
 
-// 4. بنصدّر الراوتر عشان server.js يستخدمه
+// 5. Block / Unblock
+connectionRouter.post("/block/:id", protect, blockUser);
+connectionRouter.post("/unblock/:id", protect, unblockUser);
+
+// 6. 👇👇 (مهم جداً) ضيفنا دول عشان الفرونت بيستخدمهم هنا 👇👇
+// لو لسه منقلتهمش، لازم تعملهم import وتضيفهم هنا
+connectionRouter.post("/follow/:id", protect, followUser);
+connectionRouter.post("/unfollow/:id", protect, unfollowUser);
+
 export default connectionRouter;

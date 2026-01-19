@@ -12,7 +12,16 @@ import {
     discoverUsers,
     followUser,
     unfollowUser,
-    syncUser
+    syncUser,
+    getUserById,
+    getUserNetwork,
+    toggleBlockUser,
+    toggleMuteUser,
+    updatePrivacySettings,
+    acceptFollowRequest,
+    declineFollowRequest,
+    updateNotificationSettings,
+    sendTestEmail
 } from "../controllers/userController.js";
 
 const userRouter = express.Router();
@@ -35,19 +44,42 @@ userRouter.put(
     "/update-profile",
     protect,
     upload.fields([
-        { name: "profile", maxCount: 1 },
+        { name: "profile_picture", maxCount: 1 },
         { name: "cover", maxCount: 1 }
     ]),
     updateUserData
 );
 
+userRouter.put("/update-privacy", protect, updatePrivacySettings)
+
+userRouter.put("/update-settings", protect, updateNotificationSettings);
+
 // GET /api/user/search
 userRouter.get("/search", protect, discoverUsers);
 
+userRouter.post("/test-email", protect, sendTestEmail);
+
 // POST /api/user/follow
-userRouter.post("/follow", protect, followUser);
+userRouter.post("/follow/:id", protect, followUser);
 
 // POST /api/user/unfollow
-userRouter.post("/unfollow", protect, unfollowUser);
+userRouter.post("/unfollow/:id", protect, unfollowUser);
+
+userRouter.post("/follow-request/accept/:id", protect, acceptFollowRequest);
+
+userRouter.post("/follow-request/decline/:id", protect, declineFollowRequest);
+
+// GET /api/user/:id
+userRouter.get("/:id", protect, getUserById);
+
+// :id = آيدي اليوزر صاحب البروفايل
+// :type = followers أو following
+userRouter.get('/:id/:type', protect, getUserNetwork);
+
+userRouter.put('/block/:id', protect, toggleBlockUser);
+
+userRouter.put("/mute/:id", protect, toggleMuteUser);
+
+
 
 export default userRouter;
