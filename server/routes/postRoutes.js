@@ -2,87 +2,109 @@ import express from 'express';
 import { protect } from '../middlewares/auth.js';
 import upload from '../configs/multer.js';
 import {
-    addComment,
     addPost,
-    deletePost,      // (جديد)
-    updatePost,      // (جديد)
-    getPostById,
     getPostsFeed,
+    getSavedPosts,
     getUserById,
+    getPostById,
+    updatePost,
+    deletePost,
     likeUnlikePost,
-    deleteComment,   // (جديد)
-    toggleCommentLike, // (جديد)
     sharePost,
     togglePostSave,
     reportPost,
+    addComment,
     updateComment,
-    getSavedPosts
+    deleteComment,
+    toggleCommentLike
 } from '../controllers/postController.js';
 
 const postRouter = express.Router();
 
 // ==================================================
-// 1. الروابط الثابتة (Static Routes) - لازم في الأول ⚠️
+// 1. Core Feed & Creation (Static Routes)
 // ==================================================
 
-// إضافة بوست جديد (صور + كلام)
+/**
+ * @route POST /api/post/add
+ * @desc Create new post with up to 5 images
+ */
 postRouter.post('/add', protect, upload.array('images', 5), addPost);
 
-// جلب الـ Feed (الصفحة الرئيسية)
+/**
+ * @route GET /api/post/feed
+ * @desc Get main news feed
+ */
 postRouter.get('/feed', protect, getPostsFeed);
 
+/**
+ * @route GET /api/post/saved
+ * @desc Get user's saved bookmarks
+ */
 postRouter.get("/saved", protect, getSavedPosts);
 
 // ==================================================
-// 2. روابط التفاعل (Interactions)
+// 2. User Context
 // ==================================================
 
-// لايك / ديسلايك للبوست
-// 1. غيرنا .post لـ .put عشان تطابق الفرونت إند
-// 2. غيرنا :postId لـ :id عشان تطابق الكنترولر
+/**
+ * @route GET /api/post/user/:userId
+ * @desc Get all posts by specific user
+ */
+postRouter.get("/user/:userId", protect, getUserById);
+
+// ==================================================
+// 3. Post Interactions (Like, Share, Save)
+// ==================================================
+
 postRouter.put("/like/:id", protect, likeUnlikePost);
-
-// إضافة كومنت
-postRouter.post("/comment/:postId", protect, addComment);
-
-// تعديل كومنت
-postRouter.put("/comment/:commentId", protect, updateComment);
-
-// مسح كومنت
-// (الرابط ده بيحتاج ID الكومنت نفسه)
-postRouter.delete("/comment/:commentId", protect, deleteComment);
-
-// لايك للكومنت
-postRouter.post("/comment/like/:commentId", protect, toggleCommentLike);
-
-
-// ==================================================
-// 3. روابط اليوزر والبوستات (Dynamic Routes)
-// ==================================================
-
-// بروفايل يوزر معين وبوستاته
-// (صلحنا الاسم لـ :userId عشان يطابق الكنترولر)
-postRouter.get("/user/:userId", protect, getUserById); // خليناها protect للأمان، لو عايزها public شيل الـ protect
-
-// --- عمليات البوست الواحد (CRUD) ---
-
-// شارك بوست
 postRouter.put("/share/:id", protect, sharePost);
-
-// حفظ بوست
 postRouter.put("/save/:id", protect, togglePostSave);
-
-// جلب بوست واحد (للتفاصيل)
-postRouter.get("/:id", protect, getPostById);
-
-// تعديل بوست
-postRouter.put("/:id", protect, updatePost);
-
 postRouter.post("/report/:id", protect, reportPost);
 
-// مسح بوست
+// ==================================================
+// 4. Comment Management
+// ==================================================
+
+/**
+ * @route POST /api/post/comment/:postId
+ * @desc Add comment to a post
+ */
+postRouter.post("/comment/:postId", protect, addComment);
+
+/**
+ * @route POST /api/post/comment/like/:commentId
+ * @desc Like a specific comment
+ */
+postRouter.post("/comment/like/:commentId", protect, toggleCommentLike);
+
+/**
+ * @route PUT/DELETE /api/post/comment/:commentId
+ * @desc Modify or remove comments
+ */
+postRouter.put("/comment/:commentId", protect, updateComment);
+postRouter.delete("/comment/:commentId", protect, deleteComment);
+
+// ==================================================
+// 5. Single Post CRUD (Dynamic ID - MUST BE LAST)
+// ==================================================
+
+/**
+ * @route GET /api/post/:id
+ * @desc Get single post details
+ */
+postRouter.get("/:id", protect, getPostById);
+
+/**
+ * @route PUT /api/post/:id
+ * @desc Update post content
+ */
+postRouter.put("/:id", protect, updatePost);
+
+/**
+ * @route DELETE /api/post/:id
+ * @desc Delete post
+ */
 postRouter.delete("/:id", protect, deletePost);
 
-
-// 4. التصدير
 export default postRouter;

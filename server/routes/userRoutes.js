@@ -1,45 +1,50 @@
 import express from "express";
-
-// 1. استيراد البوابين (الصارم والمتساهل)
-// 👇👇 استوردنا verifyToken هنا 👇👇
 import { protect, verifyToken } from "../middlewares/auth.js";
-
 import upload from "../configs/multer.js";
-
 import {
+    syncUser,
     getUserData,
     updateUserData,
     discoverUsers,
-    followUser,
-    unfollowUser,
-    syncUser,
     getUserById,
     getUserNetwork,
+    followUser,
+    unfollowUser,
+    acceptFollowRequest,
+    declineFollowRequest,
     toggleBlockUser,
     toggleMuteUser,
     updatePrivacySettings,
-    acceptFollowRequest,
-    declineFollowRequest,
     updateNotificationSettings,
-    sendTestEmail
 } from "../controllers/userController.js";
 
 const userRouter = express.Router();
 
+// =========================================================
+// 1. Authentication & Onboarding
+// =========================================================
 
-// ============= (الروابط بتاعتنا) =============
+/**
+ * @route POST /api/user/sync
+ * @desc Syncs user data from Clerk (First time login / Update).
+ * @middleware verifyToken (Allows users not yet in DB to access this)
+ */
+userRouter.post("/sync", verifyToken, syncUser);
 
-// 2. (!! التعديل هنا !!)
-// استخدمنا verifyToken بدل protect
-// عشان يسمح لليوزر الجديد يدخل ويتسجل في الداتابيز
-// POST /api/user/sync
-userRouter.post("/sync", verifyToken, syncUser);  // 👈👈 التغيير هنا
+// =========================================================
+// 2. Current User Profile Management
+// =========================================================
 
-// باقي الراوتات زي ما هي (تستخدم protect الصارم)
-// GET /api/user/me
+/**
+ * @route GET /api/user/me
+ * @desc Get current logged-in user's full profile.
+ */
 userRouter.get("/me", protect, getUserData);
 
-// PUT /api/user/update-profile
+/**
+ * @route PUT /api/user/update-profile
+ * @desc Update profile info and upload images.
+ */
 userRouter.put(
     "/update-profile",
     protect,
@@ -50,36 +55,52 @@ userRouter.put(
     updateUserData
 );
 
-userRouter.put("/update-privacy", protect, updatePrivacySettings)
+// =========================================================
+// 3. Settings & Preferences
+// =========================================================
 
+userRouter.put("/update-privacy", protect, updatePrivacySettings);
 userRouter.put("/update-settings", protect, updateNotificationSettings);
 
-// GET /api/user/search
+// =========================================================
+// 4. Discovery & Search
+// =========================================================
+
 userRouter.get("/search", protect, discoverUsers);
 
-userRouter.post("/test-email", protect, sendTestEmail);
+// =========================================================
+// 5. Social Actions (Follow System)
+// =========================================================
 
-// POST /api/user/follow
 userRouter.post("/follow/:id", protect, followUser);
-
-// POST /api/user/unfollow
 userRouter.post("/unfollow/:id", protect, unfollowUser);
 
+// --- Request Management ---
 userRouter.post("/follow-request/accept/:id", protect, acceptFollowRequest);
-
 userRouter.post("/follow-request/decline/:id", protect, declineFollowRequest);
 
-// GET /api/user/:id
-userRouter.get("/:id", protect, getUserById);
+// =========================================================
+// 6. Moderation (Block & Mute)
+// =========================================================
 
-// :id = آيدي اليوزر صاحب البروفايل
-// :type = followers أو following
-userRouter.get('/:id/:type', protect, getUserNetwork);
-
-userRouter.put('/block/:id', protect, toggleBlockUser);
-
+userRouter.put("/block/:id", protect, toggleBlockUser);
 userRouter.put("/mute/:id", protect, toggleMuteUser);
 
+// =========================================================
+// 7. Public Data & Network
+// =========================================================
 
+/**
+ * @route GET /api/user/:id
+ * @desc Get specific user profile (Public view).
+ */
+userRouter.get("/:id", protect, getUserById);
+
+/**
+ * @route GET /api/user/:id/:type
+ * @desc Get followers or following list.
+ * @param type 'followers' | 'following'
+ */
+userRouter.get("/:id/:type", protect, getUserNetwork);
 
 export default userRouter;

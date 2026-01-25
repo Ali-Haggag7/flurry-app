@@ -1,6 +1,18 @@
-import express from 'express';
-import { protect } from '../middlewares/auth.js';
-import upload from '../configs/multer.js';
+/**
+ * @file messageRouter.js
+ * @description Defines API endpoints for the Messaging System.
+ * Handles real-time streams (SSE), message CRUD operations, and conversation management.
+ *
+ * @path /api/message
+ */
+
+import express from "express";
+
+// --- Middleware & Config ---
+import { protect } from "../middlewares/auth.js";
+import upload from "../configs/multer.js";
+
+// --- Controllers ---
 import {
     sendMessage,
     getChatMessages,
@@ -8,39 +20,75 @@ import {
     sseController,
     markMessagesAsRead,
     deleteConversation,
-    reactToMessage
-} from '../controllers/messageController.js';
+    reactToMessage,
+} from "../controllers/messageController.js";
 
 const messageRouter = express.Router();
 
-// ==================================================
-// 1. الروابط الثابتة والـ Stream (لازم تيجي في الأول) ⚠️
-// ==================================================
+// ==============================================================================
+// 1. Static Routes & Streams (High Priority)
+// ==============================================================================
+// ⚠️ ARCHITECTURE NOTE: These routes must be defined BEFORE dynamic routes (/:id)
+// to prevent the server from interpreting "recent" or "stream" as a user ID.
 
-// SSE Stream
+/**
+ * @route GET /api/message/stream/:userId
+ * @desc Initialize Server-Sent Events (SSE) connection
+ */
 messageRouter.get("/stream/:userId", sseController);
 
-// آخر الرسايل (Recent) - لازم قبل الـ ID عشان ميفهمش كلمة recent إنها ID
-messageRouter.get('/recent', protect, getRecentMessages);
+/**
+ * @route GET /api/message/recent
+ * @desc Get list of recent conversations
+ * @access Private
+ */
+messageRouter.get("/recent", protect, getRecentMessages);
 
-// إرسال رسالة
-messageRouter.post('/send', protect, upload.single('image'), sendMessage);
+// ==============================================================================
+// 2. Message Actions (Write Operations)
+// ==============================================================================
 
-// إضافة/تعديل/حذف ردة فعل على رسالة
+/**
+ * @route POST /api/message/send
+ * @desc Send a new message (Text and/or Image)
+ * @middleware upload.single('image') - Handles multipart/form-data
+ * @access Private
+ */
+messageRouter.post("/send", protect, upload.single("image"), sendMessage);
+
+/**
+ * @route POST /api/message/react
+ * @desc Add, update, or remove a reaction
+ * @access Private
+ */
 messageRouter.post("/react", protect, reactToMessage);
 
-// قراءة الرسايل (Read)
-messageRouter.put('/read/:senderId', protect, markMessagesAsRead);
+/**
+ * @route PUT /api/message/read/:senderId
+ * @desc Mark all messages from a specific sender as read
+ * @access Private
+ */
+messageRouter.put("/read/:senderId", protect, markMessagesAsRead);
 
-// ==================================================
-// 2. الروابط المتغيرة (Dynamic Routes) - لازم في الآخر ⚠️
-// ==================================================
-
-// 👇 التعديل هنا: شيلنا كلمة /chat وبقت /:withUserId علطول
-// عشان تطابق الفرونت إند: api.get(`/message/${id}`)
-messageRouter.get('/:withUserId', protect, getChatMessages);
-
+/**
+ * @route DELETE /api/message/conversation/:targetId
+ * @desc Delete an entire conversation history
+ * @access Private
+ */
 messageRouter.delete("/conversation/:targetId", protect, deleteConversation);
 
+// ==============================================================================
+// 3. Dynamic Routes (Low Priority)
+// ==============================================================================
+
+/**
+ * @route GET /api/message/:withUserId
+ * @desc Get chat history with a specific user
+ * @access Private
+ *
+ * ⚠️ NOTE: This acts as a catch-all for GET requests.
+ * Do not place specific GET routes below this line.
+ */
+messageRouter.get("/:withUserId", protect, getChatMessages);
 
 export default messageRouter;

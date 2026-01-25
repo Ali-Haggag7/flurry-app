@@ -1,11 +1,17 @@
 import mongoose from "mongoose";
 
+/**
+ * @file Notification.js
+ * @description Schema for User Notifications.
+ * Optimized with compound indexes for high-performance feeds and unread counts.
+ */
+
 const notificationSchema = new mongoose.Schema({
     recipient: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         required: true,
-        index: true
+        index: true // Base index
     },
     sender: {
         type: mongoose.Schema.Types.ObjectId,
@@ -14,14 +20,13 @@ const notificationSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        // 👇 ضيفنا الأنواع الجديدة هنا
         enum: [
-            "like", "comment", "reply", "share", // تفاعلات
-            "follow",                            // متابعة عادية
-            "follow_request",                    // طلب متابعة (لحساب خاص)
-            "connection_request",                // طلب صداقة
-            "connection_accept",                  // قبول طلب صداقة
-            "follow_accept"
+            "like", "comment", "reply", "share",       // Interactions
+            "follow",                                  // Standard Follow
+            "follow_request",                          // Private Account Request
+            "connection_request",                      // Friend Request
+            "connection_accept",                       // Friend Request Accepted
+            "follow_accept"                            // Private Follow Accepted
         ],
         required: true
     },
@@ -37,13 +42,22 @@ const notificationSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    // 👇 الحقل الجديد: عشان نعرف حالة الطلب (هل لسه معلق ولا اتقبل؟)
     status: {
         type: String,
         enum: ["pending", "accepted", "rejected"],
-        default: "pending" // الافتراضي إنه لسه معلق
+        default: "pending" // Default state for request-based notifications
     }
-}, { timestamps: true });
+}, {
+    timestamps: true
+});
+
+// --- Performance Indexes ---
+
+// 1. Feed Optimization: Fetch user's notifications sorted by newest first
+notificationSchema.index({ recipient: 1, createdAt: -1 });
+
+// 2. UI Optimization: Quickly count unread notifications for badges
+notificationSchema.index({ recipient: 1, read: 1 });
 
 const Notification = mongoose.model("Notification", notificationSchema);
 export default Notification;

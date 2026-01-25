@@ -1,99 +1,242 @@
-import { motion } from "framer-motion";
-import { Eye, MessageSquare } from "lucide-react";
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector, useDispatch } from "react-redux";
+import { useAuth } from "@clerk/clerk-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Eye, MessageSquare, Search, UserPlus } from "lucide-react";
 
-const Messages = () => {
+// --- Local Imports ---
+import UserAvatar from "../components/common/UserDefaultAvatar";
+import { fetchMyConnections } from "../features/connectionsSlice";
+import { useSocketContext } from "../context/SocketContext";
 
-    const connections = [
-        {
-            _id: "1",
-            full_name: "John Doe",
-            username: "johndoe",
-            bio: "Just a regular guy.",
-            profile_picture: "/defaultProfile.png"
-        },
-        {
-            _id: "2",
-            full_name: "Jane Smith",
-            username: "janesmith",
-            bio: "Loves coding and coffee.",
-            profile_picture: "/defaultProfile.png"
-        }
-    ];
+/**
+ * Messages Component
+ * Displays a list of user connections to initiate chats.
+ * * Optimizations:
+ * - Memoized `filteredConnections` to prevent expensive recalculations on every render.
+ * - Memoized `ConnectionCard` to prevent re-renders of the entire list.
+ * - `useCallback` for navigation handlers.
+ * - Framer Motion `layout` prop for smooth filtering animations.
+ */
 
-    const navigate = useNavigate();
+// --- Sub-Components ---
 
-    return (
-        <div className="min-h-screen relative bg-gradient-to-br from-[#0f172a] via-purple-900 to-black text-white overflow-hidden">
-            {/* خلفيات دائرية متوهجة */}
-            <div className="absolute inset-0">
-                <div className="absolute w-[600px] h-[600px] bg-purple-500/20 rounded-full blur-3xl -top-40 -left-40 animate-pulse"></div>
-                <div className="absolute w-[400px] h-[400px] bg-pink-500/20 rounded-full blur-3xl bottom-0 right-0 animate-pulse"></div>
-            </div>
-
-            {/* العنوان والنص */}
-            <div className="relative max-w-4xl mx-auto p-6">
-                <div className="text-center mb-10">
-                    <h1 className="text-5xl font-extrabold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent drop-shadow-lg">
-                        Messages
-                    </h1>
-                    <p className="text-gray-300 mt-2 text-lg">
-                        Connect with your friends in a cosmic style 🚀✨
-                    </p>
+const MessagesSkeleton = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="bg-surface border border-adaptive rounded-2xl p-4 flex items-center gap-4">
+                <div className="w-14 h-14 bg-main rounded-full shrink-0 animate-pulse" />
+                <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-main rounded w-3/4 animate-pulse" />
+                    <div className="h-3 bg-main rounded w-1/2 animate-pulse" />
                 </div>
             </div>
+        ))}
+    </div>
+);
 
-            {/* جزء الرسائل المتحرك */}
-            <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="flex flex-col gap-4 max-w-4xl mx-auto p-6 relative z-10"
+const ConnectionCard = memo(({ user, index, isOnline, onNavigate, onViewProfile }) => (
+    <motion.div
+        layout
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        transition={{ delay: index * 0.05 }}
+        onClick={() => onNavigate(user._id)}
+        className="group relative bg-surface hover:bg-surface/80 border border-adaptive hover:border-primary/40 rounded-2xl p-4 transition-all duration-300 cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5"
+    >
+        <div className="flex items-center gap-4">
+            {/* Avatar Zone */}
+            <div className="relative shrink-0">
+                <UserAvatar
+                    user={user}
+                    className="w-14 h-14 rounded-full object-cover transition-all duration-300 ring-2 ring-transparent group-hover:ring-offset-2 group-hover:ring-offset-surface"
+                />
+                {isOnline && (
+                    <span className="absolute bottom-2.5 right-0 z-10 w-3 h-3 bg-green-500 border-2 border-surface rounded-full"></span>
+                )}
+            </div>
+
+            {/* User Info */}
+            <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-content truncate group-hover:text-primary transition-colors">
+                    {user.full_name}
+                </h3>
+                <p className="text-xs text-muted truncate">@{user.username}</p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                <button
+                    onClick={(e) => { e.stopPropagation(); onViewProfile(user._id); }}
+                    className="p-2 bg-main hover:bg-primary/10 rounded-full text-muted hover:text-primary transition-colors"
+                    title="View Profile"
+                >
+                    <Eye size={16} />
+                </button>
+            </div>
+        </div>
+    </motion.div>
+));
+
+const EmptyState = ({ searchTerm, onFindFriends }) => (
+    <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="flex flex-col items-center justify-center py-20 text-center"
+    >
+        <div className="w-20 h-20 bg-surface rounded-full flex items-center justify-center mb-4 shadow-sm border border-adaptive group hover:border-primary/50 transition-colors">
+            {searchTerm ?
+                <Search size={32} className="text-muted group-hover:text-primary transition-colors" /> :
+                <MessageSquare size={32} className="text-muted group-hover:text-primary transition-colors" />
+            }
+        </div>
+        <h3 className="text-xl font-bold text-content mb-2">
+            {searchTerm ? "No friends found" : "No conversations yet"}
+        </h3>
+        <p className="text-muted text-sm max-w-xs mb-6">
+            {searchTerm ? `We couldn't find anyone named "${searchTerm}"` : "Connect with people to start chatting!"}
+        </p>
+
+        {!searchTerm && (
+            <button
+                onClick={onFindFriends}
+                className="flex items-center gap-2 px-6 py-2.5 bg-primary hover:opacity-90 text-white rounded-xl font-medium transition-all hover:scale-105 active:scale-95 shadow-lg shadow-primary/20"
             >
-                {connections.map((user, index) => {
-                    return (
-                        <motion.div
-                            key={user._id}
-                            whileHover={{ scale: 1.03 }}
-                            transition={{ type: "spring", stiffness: 300 }}
-                            className=" flex items-center justify-between gap-4 p-5 bg-white/10 border border-white/20 rounded-xl
-                                backdrop-blur-xl shadow-lg hover:shadow-purple-500/40 hover:border-purple-400 transition cursor-pointer"
-                            onClick={() => navigate(`/messages/${user._id}`)}>
-                            {/* معلومات المستخدم */}
-                            <div className="flex items-center gap-4">
-                                <img
-                                    src={user.profile_picture || "/defaultProfile.png"}
-                                    alt={user.full_name}
-                                    className="w-14 h-14 rounded-full border-2 border-purple-500 shadow-md shadow-purple-500/40" />
-                                <div>
-                                    <h2 className="text-lg font-semibold text-white">{user.full_name}</h2>
-                                    <p className="text-sm text-purple-300">@{user.username}</p>
-                                    <p className="text-sm text-gray-400 truncate max-w-[220px]">{user.bio || "No bio available"}</p>
-                                </div>
-                            </div>
+                <UserPlus size={18} />
+                Find Friends
+            </button>
+        )}
+    </motion.div>
+);
 
-                            <div className="flex gap-3">
-                                {/* زر الرسائل */}
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/messages/${user._id}`); }}
-                                    className="p-3 rounded-full bg-gradient-to-r from-purple-500/30 to-pink-500/30 hover:from-purple-500/30
-                                        hover:to-pink-500/30 text-white shadow-md shadow-purple-500/30 hover:shadow-pink-500/50 transition cursor-pointer"
-                                >
-                                    <MessageSquare className="w-5 h-5" />
-                                </button>
-                                {/* زر إضافي يمكن استخدامه لاحقًا */}
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/messages/${user._id}`); }}
-                                    className="p-3 rounded-full bg-gradient-to-r from-purple-500/30 to-pink-500/30 hover:from-purple-500/30
-                                        hover:to-pink-500/30 text-white shadow-md shadow-purple-500/30 hover:shadow-pink-500/50 transition cursor-pointer"
-                                >
-                                    <Eye className="w-5 h-5" />
-                                </button>
+// --- Main Component ---
+
+const Messages = () => {
+    // Hooks & State
+    const dispatch = useDispatch();
+    const navigate = useNavigate();
+    const { getToken } = useAuth();
+    const { onlineUsers } = useSocketContext();
+
+    // Redux State
+    const { connections, isLoading } = useSelector((state) => state.connections || {});
+    const safeConnections = connections || []; // Ensure array safety
+
+    // Local State
+    const [searchTerm, setSearchTerm] = useState("");
+
+    // --- Effects ---
+
+    useEffect(() => {
+        let isMounted = true;
+        const loadConnections = async () => {
+            const token = await getToken();
+            if (isMounted) dispatch(fetchMyConnections(token));
+        };
+        loadConnections();
+        return () => { isMounted = false; };
+    }, [dispatch, getToken]);
+
+    // --- Memoized Logic ---
+
+    /**
+     * Filters connections based on search term.
+     * Memoized to avoid re-filtering on every render.
+     */
+    const filteredConnections = useMemo(() => {
+        if (!searchTerm) return safeConnections;
+        const lowerTerm = searchTerm.toLowerCase();
+        return safeConnections.filter((user) =>
+            user.full_name.toLowerCase().includes(lowerTerm) ||
+            user.username.toLowerCase().includes(lowerTerm)
+        );
+    }, [safeConnections, searchTerm]);
+
+    // --- Handlers ---
+
+    const handleNavigateToChat = useCallback((userId) => {
+        navigate(`/messages/${userId}`);
+    }, [navigate]);
+
+    const handleNavigateToProfile = useCallback((userId) => {
+        navigate(`/profile/${userId}`);
+    }, [navigate]);
+
+    const handleFindFriends = useCallback(() => {
+        navigate('/search');
+    }, [navigate]);
+
+    return (
+        <div className="min-h-screen relative bg-main text-content overflow-hidden pb-20 transition-colors duration-300">
+
+            {/* Animated Background */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-40 dark:opacity-60">
+                <div className="absolute w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px] -top-20 -left-20 animate-pulse"></div>
+                <div className="absolute w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px] bottom-0 right-0 animate-pulse delay-1000"></div>
+            </div>
+
+            <div className="relative max-w-5xl mx-auto px-4 py-8 md:px-8">
+
+                {/* Header & Search */}
+                <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-6 mb-10">
+                    <div className="w-full md:w-auto">
+                        <h1 className="text-3xl md:text-4xl font-extrabold text-content mb-2">
+                            Messages
+                        </h1>
+                        <p className="text-muted text-sm">
+                            Pick a friend to start chatting with
+                        </p>
+                    </div>
+
+                    {/* Search Input */}
+                    <div className="relative w-full md:w-72 group z-10">
+                        <div className="relative flex items-center bg-surface rounded-xl p-1 border border-adaptive focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all duration-300 shadow-sm">
+                            <div className="pl-3 flex items-center pointer-events-none">
+                                <Search className="h-4 w-4 text-muted group-focus-within:text-primary transition-colors" />
                             </div>
-                        </motion.div>
-                    );
-                })}
-            </motion.div>
+                            <input
+                                type="text"
+                                placeholder="Search friends..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="block w-full pl-2 pr-4 py-2 bg-transparent text-sm text-content placeholder-muted focus:outline-none border-none outline-none ring-0"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Content Grid */}
+                {isLoading ? (
+                    <MessagesSkeleton />
+                ) : (
+                    <AnimatePresence mode="popLayout">
+                        {filteredConnections.length > 0 ? (
+                            <motion.div
+                                layout
+                                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+                            >
+                                {filteredConnections.map((user, index) => (
+                                    <ConnectionCard
+                                        key={user._id}
+                                        user={user}
+                                        index={index}
+                                        isOnline={onlineUsers.includes(user?._id)}
+                                        onNavigate={handleNavigateToChat}
+                                        onViewProfile={handleNavigateToProfile}
+                                    />
+                                ))}
+                            </motion.div>
+                        ) : (
+                            <EmptyState
+                                searchTerm={searchTerm}
+                                onFindFriends={handleFindFriends}
+                            />
+                        )}
+                    </AnimatePresence>
+                )}
+            </div>
         </div>
     );
 };

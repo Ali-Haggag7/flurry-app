@@ -1,40 +1,80 @@
 import mongoose from "mongoose";
 
-const connectionSchema = new mongoose.Schema({
-    // 1. المرسل (اللي بعت الطلب)
-    sender: {
-        type: mongoose.Schema.Types.ObjectId, // 👈 التعديل الأهم: لازم ObjectId مش String
-        ref: "User",
-        required: true
-    },
+/**
+ * Connection Schema
+ * -----------------
+ * Manages the relationship status between two users (Sender & Receiver).
+ * Handles friend requests lifecycle: Pending -> Accepted/Rejected.
+ *
+ * @module models/Connection
+ */
 
-    // 2. المستقبل (اللي جاله الطلب)
-    receiver: {
-        type: mongoose.Schema.Types.ObjectId, // 👈 نفس الكلام هنا
-        ref: "User",
-        required: true
-    },
+const connectionSchema = new mongoose.Schema(
+    {
+        // --- Relationships ---
 
-    // 3. حالة الطلب
-    status: {
-        type: String,
-        enum: ["pending", "accepted", "rejected"],
-        default: "pending"
+        /**
+         * The user initiating the connection request.
+         * Note: Strictly uses ObjectId to reference the 'User' collection.
+         */
+        sender: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
+        },
+
+        /**
+         * The user receiving the connection request.
+         * Note: Strictly uses ObjectId to reference the 'User' collection.
+         */
+        receiver: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
+        },
+
+        // --- State Management ---
+
+        /**
+         * Current status of the connection request.
+         * Limits values to specific enum for data integrity.
+         */
+        status: {
+            type: String,
+            enum: ["pending", "accepted", "rejected"],
+            default: "pending",
+        },
+    },
+    {
+        // Automatically manages 'createdAt' and 'updatedAt'
+        timestamps: true,
     }
-}, {
-    timestamps: true // بيضيف createdAt و updatedAt أوتوماتيك
-});
+);
 
-// ========================================================
-// 🧠 المنطقة الذكية (Indexes)
-// ========================================================
+// --- Database Optimizations (Indexes) ---
 
-// 1. منع التكرار: (مستحيل أحمد يبعت لمحمد طلبين في نفس الوقت)
+/**
+ * 1. Data Integrity & Uniqueness
+ * Constraint: A sender cannot send multiple requests to the same receiver.
+ * Ensures { sender, receiver } pair is unique across the collection.
+ */
 connectionSchema.index({ sender: 1, receiver: 1 }, { unique: true });
 
-// 2. تسريع البحث: (عشان لما تجيب "طلبات الصداقة اللي جيالي" تبقى طيارة)
+/**
+ * 2. Query Performance
+ * Optimization: Speeds up fetching incoming requests filtered by status.
+ * Target Query: "Find all pending requests for a specific receiver."
+ */
 connectionSchema.index({ receiver: 1, status: 1 });
 
-const Connection = mongoose.model("Connection", connectionSchema);
+// --- Model Export ---
+
+/**
+ * Export Logic:
+ * Checks 'mongoose.models' first to prevent OverwriteModelError in
+ * hot-reloading environments (Next.js/Serverless), otherwise compiles the model.
+ */
+const Connection =
+    mongoose.models.Connection || mongoose.model("Connection", connectionSchema);
 
 export default Connection;

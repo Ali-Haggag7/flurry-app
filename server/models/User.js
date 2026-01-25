@@ -1,36 +1,52 @@
 import mongoose from "mongoose";
 
+/**
+ * @file User.js
+ * @description Core User Schema for Flurry.
+ * Includes auth mapping (Clerk), profile data, privacy settings, and social graph.
+ */
+
 const userSchema = new mongoose.Schema({
+    // --- Authentication & Identity ---
     clerkId: {
         type: String,
         required: true,
         unique: true,
-        index: true
+        index: true // ⚡ Fast lookup for auth middleware
     },
     email: {
         type: String,
         trim: true,
         unique: true,
-        required: true
-    },
-    full_name: {
-        type: String,
-        trim: true,
         required: true,
+        lowercase: true, // 🛡️ Normalize email to lowercase
+        match: [/^\S+@\S+\.\S+$/, 'Please use a valid email address.']
     },
     username: {
         type: String,
         trim: true,
         required: true,
-        unique: true
+        unique: true,
+        lowercase: true, // 🛡️ Normalize username for search/URLs
+        minlength: [3, 'Username must be at least 3 characters'],
+        maxlength: [30, 'Username cannot exceed 30 characters']
     },
+    full_name: {
+        type: String,
+        trim: true,
+        required: true
+    },
+
+    // --- Profile Details ---
     bio: {
         type: String,
-        default: "Hey there! I'm using flowNet!"
+        default: "Hey there! I'm using Flurry!",
+        maxlength: [160, 'Bio cannot exceed 160 characters']
     },
     location: {
         type: String,
-        default: ""
+        default: "",
+        trim: true
     },
     profile_picture: {
         type: String,
@@ -45,7 +61,7 @@ const userSchema = new mongoose.Schema({
         default: false
     },
 
-    // --- إعدادات الخصوصية ---
+    // --- Privacy & Visibility ---
     isPrivate: {
         type: Boolean,
         default: false
@@ -55,11 +71,11 @@ const userSchema = new mongoose.Schema({
         default: false
     },
 
-    // 👇👇👇 الجزء الجديد: إعدادات الإشعارات 👇👇👇
+    // --- Notification Preferences ---
     notificationSettings: {
         email: {
             type: Boolean,
-            default: true // الطبيعي إنها شغالة لحد ما هو يقفلها
+            default: true
         },
         push: {
             type: Boolean,
@@ -67,24 +83,56 @@ const userSchema = new mongoose.Schema({
         }
     },
 
-    // --- العلاقات (Connections & Follows) ---
+    // --- Social Graph (Connections) ---
+    // 1. Friends/Connections
+    connections: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: []
+    }],
 
-    // 1. الأصدقاء
-    connections: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    // 2. Connection Requests
+    pendingRequests: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: []
+    }],
+    sentRequests: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: []
+    }],
 
-    // 2. طلبات الصداقة
-    pendingRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-    sentRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // (تم دمج التكرار هنا)
+    // 3. Follow System
+    followers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: []
+    }],
+    following: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: []
+    }],
+    followRequests: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: []
+    }],
 
-    // 3. المتابعة (Follow System)
-    followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-    following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-    followRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    // 4. Moderation (Block/Mute)
+    blockedUsers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: []
+    }],
+    mutedUsers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: []
+    }],
 
-    // 4. الحظر والكتم
-    blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-    mutedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User", default: [] }],
-
+    // --- Status ---
     lastSeen: {
         type: Date,
         default: Date.now
@@ -92,7 +140,14 @@ const userSchema = new mongoose.Schema({
 
 }, {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
+
+// --- Performance Indexes ---
+
+// 1. Search Optimization: Allow finding users by name or username efficiently
+userSchema.index({ full_name: "text", username: "text" });
 
 const User = mongoose.model("User", userSchema);
 

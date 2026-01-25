@@ -1,20 +1,33 @@
-import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import axiosInstance from "../api/axios";
-import toast from "react-hot-toast";
+/**
+ * @fileoverview Messages Slice - Manages chat conversations and active chat state.
+ * Handles fetching recent conversations, retrieving specific chat histories, 
+ * and managing real-time message updates.
+ * * @version 1.1.0
+ * @author Senior Frontend Architect
+ */
 
-// 1. التلاجة (Initial State)
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import toast from "react-hot-toast";
+import axiosInstance from "../lib/axios";
+
+// --- Initial State ---
+
 const initialState = {
-    conversations: [],      // قايمة الناس اللي كلمتهم (Sidebar)
-    activeChatMessages: [], // رسايل الشات اللي مفتوح قدامي دلوقتي
-    status: "idle",         // حالة التحميل
+    conversations: [], // List of recent chat participants
+    activeChatMessages: {
+        messages: [], // Message history for the currently selected user
+        isLoading: false,
+        error: null,
+    },
+    status: "idle", // Global status for conversations list
     error: null,
 };
 
-// =========================================================
-// 2. المندوبين (Thunks) 🛵
-// =========================================================
+// --- Async Thunks (API Communications) ---
 
-// أ) مندوب جلب القائمة (بيكلم /api/message/recent)
+/**
+ * Fetches the list of recent conversations/chats for the user.
+ */
 export const fetchConversations = createAsyncThunk(
     "messages/fetchConversations",
     async (token, { rejectWithValue }) => {
@@ -22,74 +35,79 @@ export const fetchConversations = createAsyncThunk(
             const response = await axiosInstance.get("/message/recent", {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            return response.data.data; // (حسب الرد بتاع الباك إند: { success: true, data: [...] })
+            return response.data.conversations;
         } catch (error) {
-            return rejectWithValue(error.response?.data?.message || "Failed to load chats");
+            const message = error.response?.data?.message || "Failed to load chats";
+            return rejectWithValue(message);
         }
     }
 );
 
-// ب) مندوب جلب رسايل شات معين (بيكلم /api/message/chat/:id)
+/**
+ * Fetches all messages between the current user and a specific userId.
+ */
 export const fetchChatMessages = createAsyncThunk(
     "messages/fetchChatMessages",
-    async ({ withUserId, token }, { rejectWithValue }) => {
+    async ({ userId, token }, { rejectWithValue }) => {
         try {
-            const response = await axiosInstance.get(`/message/chat/${withUserId}`, {
+            const response = await axiosInstance.get(`/message/chat/${userId}`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            return response.data.data; // الرسايل
+            return response.data.data;
         } catch (error) {
-            return rejectWithValue(error.response?.data?.message || "Failed to load messages");
+            const message = error.response?.data?.message || "Failed to load messages";
+            return rejectWithValue(message);
         }
     }
 );
 
-// ج) مندوب إرسال رسالة (بيكلم /api/message/send)
+/**
+ * Sends a message (supports text and files via FormData).
+ * Implementation uses internal toast for immediate feedback.
+ */
 export const sendMessage = createAsyncThunk(
     "messages/sendMessage",
     async ({ formData, token }, { rejectWithValue }) => {
         try {
-            // formData عشان ممكن نبعت صورة
             const response = await axiosInstance.post("/message/send", formData, {
                 headers: {
                     Authorization: `Bearer ${token}`,
-                    "Content-Type": "multipart/form-data"
+                    "Content-Type": "multipart/form-data",
                 },
             });
-            return response.data.data; // الرسالة الجديدة اللي اتبعتت
+            return response.data.data;
         } catch (error) {
-            toast.error("Failed to send message");
-            return rejectWithValue(error.response?.data?.message);
+            const message = error.response?.data?.message || "Failed to send message";
+            toast.error(message);
+            return rejectWithValue(message);
         }
     }
 );
 
-// =========================================================
-// 3. الشيف (Slice) 👨‍🍳
-// =========================================================
+// --- Slice Definition ---
 
 const messagesSlice = createSlice({
     name: "messages",
     initialState,
     reducers: {
-        // (مهم جداً 🔥) أمر مباشر للشيف: "خد الرسالة دي حطها في الشات حالاً"
-        // ده هنستخدمه لما يجيلنا إشعار SSE إن فيه رسالة وصلت
+        /**
+         * Injects a message received via WebSockets into the active chat state.
+         */
         addRealtimeMessage: (state, action) => {
-            const newMessage = action.payload;
-            // بنضيفها بس لو الشات المفتوح هو نفس الشات اللي جت منه الرسالة
-            // (أو بنضيفها في كل الأحوال والفرونت يفلتر، بس الأفضل نضيفها هنا)
-            state.activeChatMessages.push(newMessage);
-
-            // وممكن كمان نحدث آخر رسالة في الـ conversations (تحدي للمحترفين 😉)
+            state.activeChatMessages.messages.push(action.payload);
         },
-        // تنظيف الشات لما أخرج منه
+        /**
+         * Resets the active chat state when navigating away or closing a chat.
+         */
         clearActiveChat: (state) => {
-            state.activeChatMessages = [];
-        }
+            state.activeChatMessages.messages = [];
+            state.activeChatMessages.isLoading = false;
+            state.activeChatMessages.error = null;
+        },
     },
     extraReducers: (builder) => {
         builder
-            // --- Fetch Conversations (القائمة) ---
+            // --- Fetch Conversations Cases ---
             .addCase(fetchConversations.pending, (state) => {
                 state.status = "loading";
             })
@@ -102,19 +120,24 @@ const messagesSlice = createSlice({
                 state.error = action.payload;
             })
 
-            // --- Fetch Chat Messages (الرسايل) ---
+            // --- Fetch Chat Messages Cases ---
             .addCase(fetchChatMessages.pending, (state) => {
-                state.status = "loading";
+                state.activeChatMessages.isLoading = true;
+                state.activeChatMessages.error = null;
             })
             .addCase(fetchChatMessages.fulfilled, (state, action) => {
-                state.status = "succeeded";
-                state.activeChatMessages = action.payload;
+                state.activeChatMessages.isLoading = false;
+                state.activeChatMessages.messages = action.payload;
+            })
+            .addCase(fetchChatMessages.rejected, (state, action) => {
+                state.activeChatMessages.isLoading = false;
+                state.activeChatMessages.error = action.payload;
             })
 
-            // --- Send Message (الإرسال) ---
+            // --- Send Message Cases ---
             .addCase(sendMessage.fulfilled, (state, action) => {
-                // لما الرسالة تتبعت بنجاح، ضيفها للشات قدامي فوراً
-                state.activeChatMessages.push(action.payload);
+                // Optimistically update the UI with the newly returned message
+                state.activeChatMessages.messages.push(action.payload);
             });
     },
 });

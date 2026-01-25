@@ -1,50 +1,98 @@
 import express from 'express';
 import { protect } from '../middlewares/auth.js';
-import upload from '../configs/multer.js'; // 👈 لازم يكون عندك الملف ده (Multer config)
-
+import upload from '../configs/multer.js';
 import {
     createGroup,
     getAvailableGroups,
     getDiscoveryGroups,
-    joinGroup,
-    getGroupRequests,
-    respondToJoinRequest,
-    getGroupMessages,
     getGroupDetails,
-    sendGroupMessage,
+    joinGroup,
     leaveGroup,
     removeMember,
-    reactToGroupMessage,
+    getGroupRequests,
+    respondToJoinRequest,
+    sendGroupMessage,
+    getGroupMessages,
     markGroupMessagesRead,
+    reactToGroupMessage,
 } from '../controllers/groupController.js';
 
 const groupRouter = express.Router();
 
-// 1️⃣ إدارة الجروبات (إنشاء - عرض - تفاصيل)
-// بنستخدم upload.single('image') عشان صورة الجروب
-groupRouter.post('/create', protect, upload.single('image'), createGroup);
-groupRouter.get('/my-groups', protect, getAvailableGroups);
-groupRouter.get('/discovery', protect, getDiscoveryGroups);
-groupRouter.post("/react", protect, reactToGroupMessage);
-// ملحوظة: الراوت اللي فيه :id يفضل يكون في الآخر عشان ميتعارضش مع اللي قبله
-groupRouter.get('/:groupId', protect, getGroupDetails);
+// =========================================================
+// 1. Group Management & Discovery
+// =========================================================
 
-// 2️⃣ العضوية (انضمام - خروج - طرد)
+/**
+ * @route POST /api/group/create
+ * @desc Create a new group (with optional image)
+ */
+groupRouter.post('/create', protect, upload.single('image'), createGroup);
+
+/**
+ * @route GET /api/group/my-groups
+ * @desc Get groups the user belongs to or owns
+ */
+groupRouter.get('/my-groups', protect, getAvailableGroups);
+
+/**
+ * @route GET /api/group/discovery
+ * @desc Get public groups to join
+ */
+groupRouter.get('/discovery', protect, getDiscoveryGroups);
+
+// =========================================================
+// 2. Chat & Real-time Messaging
+// =========================================================
+
+/**
+ * @route POST /api/group/send
+ * @desc Send text or media message to a group
+ */
+groupRouter.post('/send', protect, upload.single('file'), sendGroupMessage);
+
+/**
+ * @route GET /api/group/messages/:groupId
+ * @desc Fetch chat history
+ */
+groupRouter.get('/messages/:groupId', protect, getGroupMessages);
+
+/**
+ * @route PUT /api/group/read/:groupId
+ * @desc Mark messages as read
+ */
+groupRouter.put("/read/:groupId", protect, markGroupMessagesRead);
+
+/**
+ * @route POST /api/group/react
+ * @desc Add/Remove reaction to a message
+ */
+groupRouter.post("/react", protect, reactToGroupMessage);
+
+// =========================================================
+// 3. Membership Actions (Join/Leave)
+// =========================================================
+
 groupRouter.post('/join/:groupId', protect, joinGroup);
 groupRouter.put('/leave/:groupId', protect, leaveGroup);
-groupRouter.put('/kick', protect, removeMember);
 
-// 3️⃣ إدارة الطلبات (للأدمن)
+// =========================================================
+// 4. Administration (Owner/Admin Only)
+// =========================================================
+
+groupRouter.put('/kick', protect, removeMember);
 groupRouter.get('/requests/:groupId', protect, getGroupRequests);
 groupRouter.put('/request/respond', protect, respondToJoinRequest);
 
-// 4️⃣ الرسايل (عرض - إرسال)
-groupRouter.get('/messages/:groupId', protect, getGroupMessages);
+// =========================================================
+// 5. General Details (Dynamic Route)
+// =========================================================
 
-// 5️⃣ تعليم الرسايل كمقروءة
-groupRouter.put("/read/:groupId", protect, markGroupMessagesRead);
-
-// بنستخدم upload.single('image') هنا عشان الصور والفويس نوتس
-groupRouter.post('/send', protect, upload.single('file'), sendGroupMessage);
+/**
+ * @route GET /api/group/:groupId
+ * @desc Get single group info
+ * @note MUST be placed last to avoid conflicts with specific routes
+ */
+groupRouter.get('/:groupId', protect, getGroupDetails);
 
 export default groupRouter;

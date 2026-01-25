@@ -1,6 +1,13 @@
-import express from 'express';
-import { protect } from '../middlewares/auth.js'; // (تأكد من المسار ده عندك)
-import upload from '../configs/multer.js';        // (تأكد من المسار ده عندك)
+/**
+ * @fileoverview Story Routes - API endpoints for ephemeral content management.
+ * Handles creation, retrieval, viewing logic, and interactions (reactions).
+ * @version 1.1.0
+ * @module routes/storyRouter
+ */
+
+import express from "express";
+import { protect } from "../middlewares/auth.js";
+import upload from "../configs/multer.js";
 import {
     addStory,
     getStoriesFeed,
@@ -8,40 +15,72 @@ import {
     deleteStory,
     viewStory,
     handleStoriesEnd,
-    toggleReaction
-} from '../controllers/storyController.js';
+    toggleReaction,
+} from "../controllers/storyController.js";
 
 const storyRouter = express.Router();
 
-// ==================================================
-// 1. إضافة وعرض (Core Features)
-// ==================================================
+// ==========================================
+// --- Core Features (Creation & Feed) ---
+// ==========================================
 
-// إضافة استوري جديدة (صورة أو فيديو أو نص)
-// (مهم: اسم الحقل في الفورم داتا لازم يكون 'media')
-storyRouter.post('/add', protect, upload.single('media'), addStory);
+/**
+ * @route   POST /api/story/add
+ * @desc    Upload and create a new story (Image/Video/Text).
+ * Expects multipart/form-data with field name 'media'.
+ * @access  Private
+ */
+storyRouter.post("/add", protect, upload.single("media"), addStory);
 
-// عرض شريط الاستوريهات (Feed)
-// (ده اللي بيعمل التجميعة والدوائر)
-storyRouter.get('/feed', protect, getStoriesFeed);
+/**
+ * @route   GET /api/story/feed
+ * @desc    Retrieve the aggregated stories feed (grouped by user, sorted by unseen).
+ * @access  Private
+ */
+storyRouter.get("/feed", protect, getStoriesFeed);
 
-// مشاهدة استوري
+// ==========================================
+// --- Viewing & Interactions ---
+// ==========================================
+
+/**
+ * @route   PUT /api/story/:id/view
+ * @desc    Mark a specific individual story as viewed.
+ * @access  Private
+ */
 storyRouter.put("/:id/view", protect, viewStory);
 
-// مشاهده كل استوريهات اليوزر
-storyRouter.put('/mark-all-seen/:targetUserId', protect, handleStoriesEnd);
+/**
+ * @route   PUT /api/story/mark-all-seen/:targetUserId
+ * @desc    Bulk mark all active stories of a specific user as seen.
+ * Triggered when a user closes the story player or finishes the stack.
+ * @access  Private
+ */
+storyRouter.put("/mark-all-seen/:targetUserId", protect, handleStoriesEnd);
 
-// ==================================================
-// 2. إدارة الاستوري (Management)
-// ==================================================
+/**
+ * @route   POST /api/story/:storyId/react
+ * @desc    Toggle an emoji reaction on a story.
+ * @access  Private
+ */
+storyRouter.post("/:storyId/react", protect, toggleReaction);
 
-//عرض استوريهات يوزر معين (زي الواتساب)
-storyRouter.get('/user/:userId', protect, getUserStories);
+// ==========================================
+// --- User Specific & Management ---
+// ==========================================
 
-//مسح استوري
-storyRouter.delete('/:id', protect, deleteStory);
+/**
+ * @route   GET /api/story/user/:userId
+ * @desc    Get active stories for a specific user (Profile/Player View).
+ * @access  Private
+ */
+storyRouter.get("/user/:userId", protect, getUserStories);
 
-storyRouter.post('/:storyId/react', protect, toggleReaction);
+/**
+ * @route   DELETE /api/story/:id
+ * @desc    Delete a story manually before expiration.
+ * @access  Private
+ */
+storyRouter.delete("/:id", protect, deleteStory);
 
-// 3. التصدير
 export default storyRouter;

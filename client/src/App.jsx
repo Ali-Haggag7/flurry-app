@@ -1,67 +1,131 @@
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
-import { useUser } from '@clerk/clerk-react'
-import { Toaster } from 'react-hot-toast'
+import React, { Suspense, lazy } from 'react';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
+import { Toaster } from 'react-hot-toast';
 
-// Components & Pages
-import Messages from './pages/Messages'
-import Chat from './pages/Chat'
-import Connections from './pages/Connections'
-import Profile from './pages/Profile'
-import CreatePost from './pages/CreatePost'
-import Search from './pages/Search'
-import Settings from './pages/Settings'
-import PostDetails from './pages/PostDetails'
-import NotificationsPage from './pages/NotificationsPage'
-import Layout from './pages/Layout'
-import Feed from './pages/Feed'
-import Login from './pages/Login'
-import Loading from './components/Loading.jsx'
-import AuthWrapper from './components/AuthWrapper' // 👈 استيراد الرابر الجديد
+// --- Components & Layouts ---
+import Loading from './components/common/Loading';
+import AuthWrapper from './layouts/AuthWrapper';
+import Layout from './layouts/Layout';
 
-// (البواب الأول - بتاع Clerk)
+// --- Lazy Loaded Pages (Code Splitting) ---
+// Optimized for performance: Routes are loaded only when requested to reduce initial bundle size.
+const Login = lazy(() => import('./pages/Login'));
+const Feed = lazy(() => import('./pages/Feed'));
+const Search = lazy(() => import('./pages/Search'));
+const CreatePost = lazy(() => import('./pages/CreatePost'));
+const PostDetails = lazy(() => import('./pages/PostDetails'));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Messages = lazy(() => import('./pages/Messages'));
+const Chat = lazy(() => import('./pages/Chat'));
+const Connections = lazy(() => import('./pages/Connections'));
+const Profile = lazy(() => import('./pages/Profile'));
+const NetworkPage = lazy(() => import('./pages/NetworkPage'));
+const MyGroups = lazy(() => import('./pages/MyGroups'));
+const AvailableGroups = lazy(() => import('./pages/AvailableGroups'));
+const GroupChat = lazy(() => import('./pages/GroupChat'));
+const GroupRequests = lazy(() => import('./pages/GroupRequests'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+
+/**
+ * @component ProtectedRoute
+ * @description Guards routes against unauthenticated access using Clerk.
+ * Redirects to /login if the user is not signed in.
+ */
 const ProtectedRoute = () => {
   const { user, isLoaded } = useUser();
+
   if (!isLoaded) return <Loading />;
   if (!user) return <Navigate to="/login" replace />;
+
   return <Outlet />;
 };
 
+/**
+ * @component App
+ * @description Main application entry point managing routing, global providers, and theme-aware feedback.
+ */
 const App = () => {
-  // شيلنا كل الـ useEffect والـ Dispatch من هنا
-  // App بقى خفيف ونضيف 🧹
-
   return (
     <>
-      <Toaster />
-      <Routes>
-        <Route path="/login" element={<Login />} />
+      {/* Global Toast Notifications - Themed */}
+      <Toaster
+        position="top-center"
+        reverseOrder={false}
+        toastOptions={{
+          className: 'bg-surface text-content border border-adaptive shadow-lg',
+          style: {
+            // Inherit styles from Tailwind classes where possible, specific overrides for library defaults
+            padding: '16px',
+            borderRadius: '12px',
+          },
+          success: {
+            iconTheme: {
+              primary: '#10B981', // Emerald-500
+              secondary: 'white',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#EF4444', // Red-500
+              secondary: 'white',
+            },
+          },
+        }}
+      />
 
-        {/* 1. التأكد إن اليوزر مسجل دخول في Clerk */}
-        <Route element={<ProtectedRoute />}>
+      {/* Suspense handles the loading state while lazy chunks are being fetched */}
+      <Suspense fallback={<Loading />}>
+        <Routes>
 
-          {/* 2. التأكد إن اليوزر متزامن مع الداتابيز (AuthWrapper) */}
-          {/* الـ AuthWrapper جواه <Outlet /> فمش محتاجين نحط جواه chilren هنا بالشكل القديم */}
-          <Route element={<AuthWrapper />}>
+          {/* --- Public Routes --- */}
+          <Route path="/login" element={<Login />} />
 
-            {/* 3. عرض التصميم والصفحات */}
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Feed />} />
-              <Route path="/messages" element={<Messages />} />
-              <Route path="messages/:id" element={<Chat />} />
-              <Route path="/connections" element={<Connections />} />
-              <Route path="/search" element={<Search />} />
-              <Route path="/profile/:profileId?" element={<Profile />} />
-              <Route path="/create-post" element={<CreatePost />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/post/:id" element={<PostDetails />} />
-              <Route path="/notifications" element={<NotificationsPage />} />
-            </Route>
+          {/* --- Protected Routes (Require Authentication) --- */}
+          <Route element={<ProtectedRoute />}>
 
-          </Route>
-        </Route>
+            {/* Database Synchronization Wrapper */}
+            <Route element={<AuthWrapper />}>
 
-        {/* <Route path="*" element={<NotFoundPage />} /> */}
-      </Routes>
+              {/* Main Layout (Sidebar, Navbar, etc.) */}
+              <Route path="/" element={<Layout />}>
+
+                {/* 1. Core Features */}
+                <Route index element={<Feed />} />
+                <Route path="/search" element={<Search />} />
+                <Route path="/create-post" element={<CreatePost />} />
+                <Route path="/post/:id" element={<PostDetails />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/settings" element={<Settings />} />
+
+                {/* 2. Chat & Messaging */}
+                <Route path="/messages" element={<Messages />} />
+                <Route path="messages/:id" element={<Chat />} />
+
+                {/* 3. User & Network */}
+                <Route path="/connections" element={<Connections />} />
+                <Route path="/profile/:profileId?" element={<Profile />} />
+                <Route path="/profile/:userId/followers" element={<NetworkPage />} />
+                <Route path="/profile/:userId/following" element={<NetworkPage />} />
+
+                {/* 4. Groups Module */}
+                <Route path="/groups" element={<MyGroups />} />
+                <Route path="/groups/available" element={<AvailableGroups />} />
+                <Route path="/groups/:groupId/chat" element={<GroupChat />} />
+                <Route path="/groups/:groupId/requests" element={<GroupRequests />} />
+
+              </Route> {/* End of Layout */}
+
+            </Route> {/* End of AuthWrapper */}
+
+          </Route> {/* End of ProtectedRoute */}
+
+          {/* --- 404 Catch-All Route --- */}
+          <Route path="*" element={<NotFound />} />
+
+        </Routes>
+      </Suspense>
     </>
   );
 };

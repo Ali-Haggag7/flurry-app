@@ -1,10 +1,284 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Outfit:wght@100..900&display=swap');
 @import "tailwindcss";
 
-* {
-    font-family: 'Outfit', sans-serif;
+/* =========================================
+  🎨 Tailwind Theme Configuration (v4)
+  Mapping CSS variables to utility classes
+  =========================================
+*/
+@theme {
+    /* Backgrounds */
+    --color-main: var(--color-bg);
+    --color-surface: var(--color-surface);
+
+    /* Typography Colors */
+    --color-content: var(--color-text-main);
+    --color-muted: var(--color-text-sec);
+
+    /* Borders & Accents */
+    --color-adaptive: var(--color-border);
+    --color-primary: var(--color-primary);
+
+    /* Fonts */
+    --font-sans: 'Outfit', sans-serif;
 }
 
-.scrollbar-hide::-webkit-scrollbar {
-    display: none;
+/* =========================================
+  🔤 Typography System
+  =========================================
+*/
+@font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/outfit-v15-latin-regular.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/outfit-v15-latin-700.woff2') format('woff2');
+}
+
+/* =========================================
+  🛠️ Base Styles & Theme Definitions
+  =========================================
+*/
+@layer base {
+
+    /* --- 🌑 Default Theme: Dark (Deep Navy) --- */
+    :root {
+        /* Backgrounds & Surface */
+        --color-bg: #020617;
+        /* Slate 950 */
+        --color-surface: #0f172a;
+        /* Slate 900 */
+
+        /* Text */
+        --color-text-main: #f8fafc;
+        /* Slate 50 */
+        --color-text-sec: #94a3b8;
+        /* Slate 400 */
+
+        /* Borders */
+        --color-border: rgba(255, 255, 255, 0.08);
+
+        /* Primary Accent (Amethyst) */
+        --color-primary: #a855f7;
+        /* Purple 500 */
+
+        /* Scrollbar Variables */
+        --scrollbar-track: var(--color-bg);
+        --scrollbar-thumb: var(--color-surface);
+        --scrollbar-thumb-hover: var(--color-primary);
+    }
+
+    /* Dark Mode Accents */
+    :root[data-accent='green'] {
+        --color-primary: #10b981;
+    }
+
+    /* Emerald 500 */
+    :root[data-accent='red'] {
+        --color-primary: #f43f5e;
+    }
+
+    /* Rose 500 */
+
+    /* --- ☀️ Theme: Light (Modern Clean) --- */
+    :root[data-theme='light'] {
+        --color-bg: #f9fafb;
+        /* Gray 50 */
+        --color-surface: #ffffff;
+        /* White */
+        --color-text-main: #111827;
+        /* Gray 900 */
+        --color-text-sec: #6b7280;
+        /* Gray 500 */
+        --color-border: #e5e7eb;
+        /* Gray 200 */
+        --color-primary: #2563eb;
+        /* Blue 600 */
+
+        /* Light Mode Scrollbar */
+        --scrollbar-track: transparent;
+        --scrollbar-thumb: #d1d5db;
+        /* Gray 300 */
+    }
+
+    /* Light Mode Accents */
+    :root[data-theme='light'][data-accent='green'] {
+        --color-primary: #059669;
+    }
+
+    /* Emerald 600 */
+    :root[data-theme='light'][data-accent='orange'] {
+        --color-primary: #ea580c;
+    }
+
+    /* Orange 600 */
+
+    /* --- 🦄 Theme: Fantasy (Deep Space & Neon) --- */
+    :root[data-theme='fantasy'] {
+        --color-bg: #0b0214;
+        /* Deep Violet */
+        --color-surface: #1a0b2e;
+        /* Black Currant */
+        --color-text-main: #e9d5ff;
+        /* Purple 100 */
+        --color-text-sec: #a855f7;
+        /* Purple 500 */
+        --color-border: rgba(216, 180, 254, 0.1);
+        --color-primary: #d946ef;
+        /* Fuchsia 500 */
+
+        /* Fantasy Scrollbar */
+        --scrollbar-track: var(--color-bg);
+        --scrollbar-thumb: #4c1d95;
+        /* Violet 900 */
+    }
+
+    /* Fantasy Accents */
+    :root[data-theme='fantasy'][data-accent='cyan'] {
+        --color-primary: #06b6d4;
+    }
+
+    /* Cyan 500 */
+    :root[data-theme='fantasy'][data-accent='yellow'] {
+        --color-primary: #eab308;
+    }
+
+    /* Yellow 500 */
+
+    /* --- Global Body Styles --- */
+    body {
+        background-color: var(--color-bg);
+        color: var(--color-text-main);
+        font-family: var(--font-sans);
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    /* Input Border Fix */
+    input,
+    textarea {
+        border-color: var(--color-border) !important;
+    }
+
+    /* --- Custom Scrollbar Implementation --- */
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    }
+
+    ::-webkit-scrollbar {
+        width: 14px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background-color: var(--scrollbar-track);
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background-color: var(--scrollbar-thumb);
+        background-clip: content-box;
+        border: 4px solid transparent;
+        border-radius: 99px;
+        /* Pill shape */
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background-color: var(--color-primary);
+        border-width: 0 3px;
+    }
+}
+
+/* =========================================
+  🔧 Utilities
+  =========================================
+*/
+@layer utilities {
+    .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+/* =========================================
+  🧩 Components & Animations
+  =========================================
+*/
+@layer components {
+
+    /* Link Hover Effect */
+    .link-hover {
+        @apply text-muted hover:text-primary transition-colors duration-200 cursor-pointer;
+    }
+
+    /* Audio Visualizer Waves */
+    .audio-wave-bar {
+        width: 4px;
+        background-color: var(--color-primary);
+        border-radius: 9999px;
+        animation: wave 1s ease-in-out infinite;
+    }
+
+    .audio-wave-bar:nth-child(1) {
+        animation-duration: 0.8s;
+    }
+
+    .audio-wave-bar:nth-child(2) {
+        animation-duration: 1.1s;
+    }
+
+    .audio-wave-bar:nth-child(3) {
+        animation-duration: 1.3s;
+    }
+
+    .audio-wave-bar:nth-child(4) {
+        animation-duration: 0.9s;
+    }
+
+    .audio-wave-bar:nth-child(5) {
+        animation-duration: 1.2s;
+    }
+
+    /* Custom Range Slider */
+    input[type="range"] {
+        -webkit-appearance: none;
+        background: transparent;
+        border: none !important;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 10px;
+        width: 10px;
+        border-radius: 50%;
+        background: var(--color-text-main);
+        cursor: pointer;
+        margin-top: -2px;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* =========================================
+  🎬 Keyframes
+  =========================================
+*/
+@keyframes wave {
+
+    0%,
+    100% {
+        height: 10%;
+    }
+
+    50% {
+        height: 100%;
+    }
 }

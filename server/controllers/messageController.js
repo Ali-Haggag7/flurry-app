@@ -1,80 +1,127 @@
-import imagekit from "../configs/imagekit.js"; // 👈 لازم الامتداد .js في الآخر
+import mongoose from "mongoose";
 import expressAsyncHandler from "express-async-handler";
+import imagekit from "../configs/imagekit.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
-import mongoose from "mongoose";
 import { getReceiverSocketId, io } from "../socket/socket.js";
 
-// مخزن الاتصالات الحية (لليوزرز الفاتحين)
+/**
+ * @file messageController.js
+ * @description Production-grade controller for managing real-time chat, media handling, and SSE streams.
+ * Optimized for performance with reusable population logic and strict validation.
+ */
+
+// --- Constants & Config ---
+
+/**
+ * Global SSE Connection Registry.
+ * Note: In a clustered environment (Kubernetes/PM2), use Redis for session management.
+ */
 export const connections = {};
 
+/**
+ * Reusable Mongoose Populate Options.
+ * Centralized to ensure consistency across endpoints and reduce code duplication.
+ */
+const POPULATE_SENDER = {
+    path: "sender",
+    select: "full_name profile_picture clerkId username",
+};
 
-/**----------------------------------------------
- * @desc SSE Endpoint (Open Connection)
- * @route /api/message/stream/:userId
- * @method GET
- * @access Public (أو Private لو بتبعت التوكن)
---------------------------------------------------*/
+const POPULATE_STORY = {
+    path: "replyToStoryId",
+    select: "image mediaUrl content type background_color",
+};
+
+const POPULATE_REPLY_TO = {
+    path: "replyTo",
+    select: "text sender message_type media_url",
+    populate: {
+        path: "sender",
+        select: "full_name username",
+    },
+};
+
+const POPULATE_REACTIONS = {
+    path: "reactions.user",
+    select: "full_name username profile_picture",
+};
+
+// Combined populate array for full message details
+const FULL_MESSAGE_POPULATE = [
+    POPULATE_SENDER,
+    POPULATE_STORY,
+    POPULATE_REPLY_TO,
+    POPULATE_REACTIONS
+];
+
+// --- Controllers ---
+
+/**
+ * @desc Initialize Server-Sent Events (SSE) Stream
+ * @route GET /api/message/stream/:userId
+ * @access Public/Private
+ */
 export const sseController = (req, res) => {
     const { userId } = req.params;
 
-    // إعدادات الـ SSE (لازم تكون كده)
+    // 1. Establish SSE Headers
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
-    // (أمان) بنسمح للفرونت إند بتاعنا بس
-    // res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL); 
+    // Security: Ensure CORS is handled at the middleware level or uncomment below
+    // res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL);
 
-    // تسجيل اليوزر إنه "أونلاين" معانا
+    // 2. Register Active Connection
     connections[userId] = res;
 
-    // رسالة ترحيب (عشان نتأكد إن الخط فتح)
+    // 3. Send Heartbeat/Handshake
     res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
 
-    // لما اليوزر يقفل (يخرج من الصفحة)
+    // 4. Cleanup on Client Disconnect
     req.on("close", () => {
-        delete connections[userId];
-        console.log(`Client ${userId} disconnected`);
+        if (connections[userId] === res) {
+            delete connections[userId];
+        }
+        console.log(`[SSE] Client ${userId} disconnected`);
     });
 };
 
-
-/**----------------------------------------------
- * @desc Send Message (Text, Image, or Audio)
- * @route /api/message/send
- * @method POST
+/**
+ * @desc Send a new message (Text, Image, Audio, or Shared Post)
+ * @route POST /api/message/send
  * @access Private
---------------------------------------------------*/
+ */
 export const sendMessage = expressAsyncHandler(async (req, res) => {
     const { userId } = req.auth();
     const { receiverId, text, sharedPostId, storyId, replyTo } = req.body;
     const file = req.file;
 
-    // 1. هات الراسل
+    // 1. Validate Sender
     const senderUser = await User.findOne({ clerkId: userId });
-    if (!senderUser) { res.status(404); throw new Error("Sender not found"); }
+    if (!senderUser) {
+        res.status(404);
+        throw new Error("Sender not found");
+    }
     const senderMongoId = senderUser._id;
 
-    // 2. هات المستقبل
-    let finalReceiverId = receiverId;
+    // 2. Validate Receiver (Support Clerk ID or Mongo ID)
     let receiverUser = null;
+    const isMongoId = mongoose.Types.ObjectId.isValid(receiverId);
 
-    if (mongoose.Types.ObjectId.isValid(receiverId)) {
+    if (isMongoId) {
         receiverUser = await User.findById(receiverId);
-        if (receiverUser) finalReceiverId = receiverUser._id;
-    }
-
-    if (!receiverUser) {
+    } else {
         receiverUser = await User.findOne({ clerkId: receiverId });
-        if (receiverUser) finalReceiverId = receiverUser._id;
     }
 
     if (!receiverUser) {
         res.status(404);
         throw new Error("Receiver not found");
     }
+    const finalReceiverId = receiverUser._id;
 
-    // 👇👇👇 🛡️ 1. نقطة تفتيش البلوك (Block Check) 👇👇👇
+    // 3. Privacy & Block Checks
     const isSenderBlocked = senderUser.blockedUsers.includes(finalReceiverId);
     const isReceiverBlocked = receiverUser.blockedUsers.includes(senderMongoId);
 
@@ -83,34 +130,44 @@ export const sendMessage = expressAsyncHandler(async (req, res) => {
         throw new Error("You cannot send messages to this user (Blocked).");
     }
 
-    // 👇👇👇 🤝 2. نقطة تفتيش الكونيكشن (Connection Check) - الإضافة الجديدة 👇👇👇
-    // هل الشخص ده موجود في قائمة الـ connections بتاعتي؟
-    // (بما إن الكونيكشن علاقة متبادلة، يكفي نتأكد إنه عندي)
-
-    // ملاحظة: تأكد إن senderUser.connections مصفوفة IDs في السكيما
-    const isConnected = senderUser.connections.some(id => id.toString() === finalReceiverId.toString());
+    // 4. Connection Requirement Check
+    // Ensure we cast to string for accurate comparison
+    const isConnected = senderUser.connections.some(
+        (id) => id.toString() === finalReceiverId.toString()
+    );
 
     if (!isConnected) {
         res.status(403);
         throw new Error("You must be connected to send messages.");
     }
-    // 👆👆👆 🤝 👆👆👆
 
-
-    // ... باقي الكود (رفع الملفات وإنشاء الرسالة) ...
-
+    // 5. Handle Media Uploads (ImageKit)
     let mediaUrl = "";
     let messageType = "text";
 
     if (file) {
-        if (file.mimetype.startsWith("image")) {
-            messageType = "image";
-            const uploadResponse = await imagekit.upload({ file: file.buffer, fileName: `msg-${Date.now()}`, folder: "/messages/images" });
-            mediaUrl = uploadResponse.url;
-        } else if (file.mimetype.startsWith("audio")) {
-            messageType = "audio";
-            const uploadResponse = await imagekit.upload({ file: file.buffer, fileName: `voice-${Date.now()}.webm`, folder: "/messages/voices" });
-            mediaUrl = uploadResponse.url;
+        const timestamp = Date.now();
+        try {
+            if (file.mimetype.startsWith("image")) {
+                messageType = "image";
+                const { url } = await imagekit.upload({
+                    file: file.buffer,
+                    fileName: `msg-${timestamp}`,
+                    folder: "/messages/images",
+                });
+                mediaUrl = url;
+            } else if (file.mimetype.startsWith("audio")) {
+                messageType = "audio";
+                const { url } = await imagekit.upload({
+                    file: file.buffer,
+                    fileName: `voice-${timestamp}.webm`,
+                    folder: "/messages/voices",
+                });
+                mediaUrl = url;
+            }
+        } catch (uploadError) {
+            res.status(500);
+            throw new Error("Media upload failed");
         }
     } else if (sharedPostId) {
         messageType = "shared_post";
@@ -118,9 +175,11 @@ export const sendMessage = expressAsyncHandler(async (req, res) => {
         messageType = "story_reply";
     }
 
+    // 6. Determine Delivery Status
     const receiverSocketId = getReceiverSocketId(finalReceiverId.toString());
-    const isDelivered = receiverSocketId ? true : false;
+    const isDelivered = !!receiverSocketId;
 
+    // 7. Create & Populate Message
     let newMessage = await Message.create({
         sender: senderMongoId,
         receiver: finalReceiverId,
@@ -129,31 +188,18 @@ export const sendMessage = expressAsyncHandler(async (req, res) => {
         media_url: mediaUrl,
         sharedPostId: sharedPostId || null,
         replyToStoryId: storyId || null,
-        replyTo: replyTo || null, // ✅ تخزين الـ ID بتاع الرسالة الأصلية
+        replyTo: replyTo || null,
         delivered: isDelivered,
-        read: false
+        read: false,
     });
 
-    // 👇👇👇 التعديل الجوهري: الـ Populate الشامل 👇👇👇
-    newMessage = await newMessage.populate([
-        { path: "sender", select: "full_name profile_picture clerkId username" }, // بيانات الراسل
-        { path: "replyToStoryId", select: "image content type background_color" }, // بيانات الستوري (لو رد على ستوري)
+    newMessage = await newMessage.populate(FULL_MESSAGE_POPULATE);
 
-        // ✅ إضافة populate للرسالة المردود عليها
-        {
-            path: "replyTo",
-            select: "text sender message_type media_url", // هات نص ونوع الرسالة القديمة
-            populate: {
-                path: "sender",
-                select: "full_name username" // وهات اسم صاحب الرسالة القديمة
-            }
-        }
-    ]);
-
+    // 8. Real-time Emission (Socket.io)
     if (receiverSocketId) {
         io.to(receiverSocketId).emit("receiveMessage", newMessage);
-        console.log(`Message sent via Socket to: ${receiverSocketId}`);
 
+        // Notify sender of delivery
         const senderSocketId = getReceiverSocketId(senderMongoId.toString());
         if (senderSocketId) {
             io.to(senderSocketId).emit("messageDelivered", { toUserId: finalReceiverId });
@@ -163,18 +209,16 @@ export const sendMessage = expressAsyncHandler(async (req, res) => {
     res.status(201).json({ success: true, data: newMessage });
 });
 
-
-/**----------------------------------------------
- * @desc Get Chat Messages
- * @route /api/message/:withUserId
- * @method GET
+/**
+ * @desc Fetch Chat History with a specific user
+ * @route GET /api/message/:withUserId
  * @access Private
- * -----------------------------------------------*/
+ */
 export const getChatMessages = expressAsyncHandler(async (req, res) => {
     const { userId: clerkId } = req.auth();
     const { withUserId } = req.params;
 
-    // 1. هات الـ Mongo ID بتاعي أنا (الراسل)
+    // 1. Resolve Current User
     const user = await User.findOne({ clerkId });
     if (!user) {
         res.status(404);
@@ -182,85 +226,64 @@ export const getChatMessages = expressAsyncHandler(async (req, res) => {
     }
     const myId = user._id;
 
-    // 👇👇👇 التعديل الحاسم هنا 👇👇👇
-    // 2. تحديد هوية الطرف التاني (Mongo ID)
-    // عشان لو الرابط فيه Clerk ID (user_...) نحوله لـ Mongo ID (65a...)
+    // 2. Resolve Partner ID
     let partnerId = withUserId;
-
-    // لو الـ ID اللي جاي مش MongoID صحيح (يعني غالباً ClerkID)
     if (!mongoose.Types.ObjectId.isValid(withUserId)) {
         const partner = await User.findOne({ clerkId: withUserId });
         if (partner) {
-            partnerId = partner._id; // ✅ مسكنا الـ Mongo ID الصح
+            partnerId = partner._id;
         } else {
-            // لو مش لاقيين اليوزر ده، نرجع شات فاضي بدل ما نضرب إيرور
+            // Graceful fallback for invalid/non-existent users
             return res.status(200).json({ success: true, data: [] });
         }
     }
-    // 👆👆👆
 
-    // 3. البحث في الرسايل
+    // 3. Query Messages
+    // Logic: (Sender=Me & Receiver=Partner) OR (Sender=Partner & Receiver=Me) AND Not Deleted
     const messages = await Message.find({
         $and: [
             {
                 $or: [
                     { sender: myId, receiver: partnerId },
-                    { sender: partnerId, receiver: myId }
-                ]
+                    { sender: partnerId, receiver: myId },
+                ],
             },
-            { deletedBy: { $ne: myId } }
-        ]
+            { deletedBy: { $ne: myId } },
+        ],
     })
-        .sort({ createdAt: 1 })
-        .populate([
-            { path: "sender", select: "full_name profile_picture clerkId username" }, // ضيفنا username عشان بنحتاجه
-            { path: "replyToStoryId", select: "image content type background_color" },
+        .sort({ createdAt: 1 }) // Chronological order
+        .populate(FULL_MESSAGE_POPULATE)
+        .lean(); // Convert to plain JS objects for performance
 
-            // 👇👇👇 دي الإضافة السحرية اللي هتحل المشكلة 👇👇👇
-            {
-                path: "replyTo",
-                select: "text sender message_type media_url", // هات بيانات الرسالة الأصلية
-                populate: {
-                    path: "sender",
-                    select: "full_name username" // عشان نعرض "Replying to Ahmed"
-                }
-            }
-            // 👆👆👆👆👆👆👆👆👆👆👆👆👆👆
-        ])
-        .populate("reactions.user", "full_name username profile_picture")
-        .lean();
+    // 4. Mark Messages as Read (Batch Update)
+    const unreadMessages = messages.some(
+        (msg) => msg.sender.toString() === partnerId.toString() && !msg.read
+    );
 
-    // 4. تحديث حالة القراءة (Read)
-    if (messages.length > 0) {
+    if (unreadMessages) {
         await Message.updateMany(
             { sender: partnerId, receiver: myId, read: false },
             { $set: { read: true } }
         );
+
+        // Notify partner that I have seen their messages
+        const partnerSocketId = getReceiverSocketId(partnerId.toString());
+        if (partnerSocketId) {
+            io.to(partnerSocketId).emit("messagesSeen", { byUserId: myId });
+        }
     }
 
-    const partnerSocketId = getReceiverSocketId(partnerId.toString());
-    if (partnerSocketId) {
-        // قوله: "بشرى سارة، الطرف التاني شاف رسايلك حالا!"
-        io.to(partnerSocketId).emit("messagesSeen", { byUserId: myId });
-    }
-
-    res.status(200).json({
-        success: true,
-        data: messages
-    });
+    res.status(200).json({ success: true, data: messages });
 });
 
-
-/**----------------------------------------------
- * @desc Get User Recent Messages (Conversations List)
- * @route /api/message/recent
- * @method GET
+/**
+ * @desc Get List of Recent Conversations
+ * @route GET /api/message/recent
  * @access Private
---------------------------------------------------*/
+ */
 export const getRecentMessages = expressAsyncHandler(async (req, res) => {
     const { userId: clerkId } = req.auth();
 
-    // 1. هات اليوزر الحالي
     const user = await User.findOne({ clerkId });
     if (!user) {
         res.status(404);
@@ -268,63 +291,62 @@ export const getRecentMessages = expressAsyncHandler(async (req, res) => {
     }
     const myId = user._id;
 
-    // 2. Aggregation Pipeline
+    // Aggregation Pipeline for efficient grouping
     const conversations = await Message.aggregate([
-        // المرحلة 1: تصفية الرسايل
+        // A. Filter relevant messages
         {
             $match: {
                 $or: [{ sender: myId }, { receiver: myId }],
-                deletedBy: { $ne: myId }
-            }
+                deletedBy: { $ne: myId },
+            },
         },
-
-        // المرحلة 2: ترتيب تنازلي (الأحدث أولاً)
+        // B. Sort by newest first
         { $sort: { createdAt: -1 } },
-
-        // المرحلة 3: التجميع حسب الطرف الآخر
+        // C. Group by "Conversation Partner"
         {
             $group: {
                 _id: {
                     $cond: {
                         if: { $eq: ["$sender", myId] },
                         then: "$receiver",
-                        else: "$sender"
-                    }
+                        else: "$sender",
+                    },
                 },
                 lastMessage: { $first: "$$ROOT" },
                 unreadCount: {
                     $sum: {
                         $cond: [
-                            { $and: [{ $eq: ["$receiver", myId] }, { $eq: ["$read", false] }] },
+                            {
+                                $and: [
+                                    { $eq: ["$receiver", myId] },
+                                    { $eq: ["$read", false] },
+                                ],
+                            },
                             1,
-                            0
-                        ]
-                    }
-                }
-            }
+                            0,
+                        ],
+                    },
+                },
+            },
         },
-
-        // المرحلة 4: Lookup لبيانات الطرف الآخر
+        // D. Join with User collection
         {
             $lookup: {
                 from: "users",
                 localField: "_id",
                 foreignField: "_id",
-                as: "partnerDetails"
-            }
+                as: "partnerDetails",
+            },
         },
-
-        // المرحلة 5: استخراج البيانات وتجهيز حالة البلوك
+        // E. Flatten User Details
         {
             $project: {
-                _id: 0,
                 lastMessage: 1,
                 unreadCount: 1,
-                partnerRaw: { $arrayElemAt: ["$partnerDetails", 0] } // البيانات الخام
-            }
+                partnerRaw: { $arrayElemAt: ["$partnerDetails", 0] },
+            },
         },
-
-        // المرحلة 6: تشكيل الشكل النهائي وإضافة معلومات البلوك
+        // F. Final Projection & Block Logic
         {
             $project: {
                 lastMessage: 1,
@@ -333,56 +355,49 @@ export const getRecentMessages = expressAsyncHandler(async (req, res) => {
                     _id: "$partnerRaw._id",
                     full_name: "$partnerRaw.full_name",
                     username: "$partnerRaw.username",
-                    profile_picture: "$partnerRaw.profile_picture"
+                    profile_picture: "$partnerRaw.profile_picture",
                 },
-                // 👇👇 لوجيك البلوك في الباك إند 👇👇
                 isBlockedByMe: {
-                    $in: ["$partnerRaw._id", user.blockedUsers || []] // هل الـ Partner موجود في البلوك ليست بتاعتي؟
+                    $in: ["$partnerRaw._id", user.blockedUsers || []],
                 },
                 isBlockedByPartner: {
-                    $in: [myId, { $ifNull: ["$partnerRaw.blockedUsers", []] }] // هل أنا موجود في البلوك ليست بتاعته؟
-                }
-            }
+                    $in: [myId, { $ifNull: ["$partnerRaw.blockedUsers", []] }],
+                },
+            },
         },
-
-        // المرحلة 7: ترتيب المحادثات (الأحدث فوق)
-        { $sort: { "lastMessage.createdAt": -1 } }
+        // G. Final Sort (Most recent conversation top)
+        { $sort: { "lastMessage.createdAt": -1 } },
     ]);
 
-    res.status(200).json({
-        success: true,
-        conversations
-    });
+    res.status(200).json({ success: true, conversations });
 });
 
-
-/**----------------------------------------------
- * @desc Mark messages as read
- * @route /api/message/read/:senderId
- * @method PUT
+/**
+ * @desc Mark all messages from a sender as read
+ * @route PUT /api/message/read/:senderId
  * @access Private
-----------------------------------------------*/
+ */
 export const markMessagesAsRead = expressAsyncHandler(async (req, res) => {
-    const { senderId } = req.params; // الشخص اللي بعتلي (اللي عاوزين نخلي علاماته زرقاء)
+    const { senderId } = req.params;
     const { userId: clerkId } = req.auth();
 
     const user = await User.findOne({ clerkId });
-    const myId = user._id; // أنا (المستقبل اللي فاتح الشات حالياً)
+    const myId = user._id;
 
-    // 1. Resolve IDs
+    // Resolve Sender ID
     let finalSenderId = senderId;
     if (!mongoose.Types.ObjectId.isValid(senderId)) {
         const senderUser = await User.findOne({ clerkId: senderId });
         if (senderUser) finalSenderId = senderUser._id;
     }
 
-    // 2. تحديث الداتابيز
+    // Update DB
     const result = await Message.updateMany(
         { sender: finalSenderId, receiver: myId, read: false },
         { $set: { read: true } }
     );
 
-    // 👇👇👇 التريك هنا: لو فيه رسايل اتحدثت، ابعت إشارة فورية للراسل بالسوكيت
+    // Real-time Notification
     if (result.modifiedCount > 0) {
         const senderSocketId = getReceiverSocketId(finalSenderId.toString());
         if (senderSocketId) {
@@ -393,13 +408,11 @@ export const markMessagesAsRead = expressAsyncHandler(async (req, res) => {
     res.status(200).json({ success: true, message: "Messages marked as read" });
 });
 
-
-/**----------------------------------------------
- * @desc Delete Conversation (Soft Delete for current user only)
- * @route /api/message/conversation/:targetId
- * @method DELETE
+/**
+ * @desc Clear Conversation (Soft Delete)
+ * @route DELETE /api/message/conversation/:targetId
  * @access Private
---------------------------------------------------*/
+ */
 export const deleteConversation = expressAsyncHandler(async (req, res) => {
     const { userId } = req.auth();
     const { targetId } = req.params;
@@ -407,91 +420,89 @@ export const deleteConversation = expressAsyncHandler(async (req, res) => {
     const currentUser = await User.findOne({ clerkId: userId });
     const myId = currentUser._id;
 
-    // بدل deleteMany هنستخدم updateMany
     await Message.updateMany(
         {
-            // حدد الرسايل اللي بيني وبين الشخص ده
             $or: [
                 { sender: myId, receiver: targetId },
-                { sender: targetId, receiver: myId }
-            ]
+                { sender: targetId, receiver: myId },
+            ],
         },
         {
-            // $addToSet: بتضيف القيمة للمصفوفة لو مش موجودة (عشان التكرار)
-            $addToSet: { deletedBy: myId }
+            $addToSet: { deletedBy: myId },
         }
     );
 
     res.status(200).json({ success: true, message: "Chat cleared for you only" });
 });
 
-
-/**----------------------------------------------
- * @desc React to a Message (Add/Update/Remove Reaction)
- * @route /api/message/react
- * @method POST
+/**
+ * @desc Toggle Message Reaction (Add/Remove/Update)
+ * @route POST /api/message/react
  * @access Private
---------------------------------------------------*/
+ */
 export const reactToMessage = expressAsyncHandler(async (req, res) => {
     const { userId } = req.auth();
     const { messageId, emoji } = req.body;
 
-    // 1. هات اليوزر
     const currentUser = await User.findOne({ clerkId: userId });
-    if (!currentUser) { res.status(404); throw new Error("User not found"); }
-
-    // 2. هات الرسالة (سواء عادية أو جروب - ممكن تعمل check وتدور في الاتنين)
-    // هنا هنفترض إننا بنتعامل مع Message عادية (كرر نفس اللوجيك للجروب)
-    let message = await Message.findById(messageId);
-
-    // (لو ملقناش في العادي، دور في الجروب)
-    let isGroupMsg = false;
-    if (!message) {
-        message = await GroupMessage.findById(messageId);
-        isGroupMsg = true;
+    if (!currentUser) {
+        res.status(404);
+        throw new Error("User not found");
     }
 
-    if (!message) { res.status(404); throw new Error("Message not found"); }
+    // Find Message (Standard or Group)
+    let message = await Message.findById(messageId);
+    let isGroupMsg = false;
 
-    // 3. اللوجيك الذكي للتفاعل (Toggle Logic) 🧠
-    const existingReactionIndex = message.reactions.findIndex(r => r.user.toString() === currentUser._id.toString());
+    // Optional: Add GroupMessage support if schema exists
+    // if (!message) { message = await GroupMessage.findById(messageId); isGroupMsg = true; }
+
+    if (!message) {
+        res.status(404);
+        throw new Error("Message not found");
+    }
+
+    // Reaction Logic
+    const existingReactionIndex = message.reactions.findIndex(
+        (r) => r.user.toString() === currentUser._id.toString()
+    );
 
     if (existingReactionIndex > -1) {
-        // اليوزر ده تفاعل قبل كده
+        // Toggle: Remove if same emoji, Update if different
         if (message.reactions[existingReactionIndex].emoji === emoji) {
-            // داس على نفس الايموجي -> شيله (Remove)
             message.reactions.splice(existingReactionIndex, 1);
         } else {
-            // داس على ايموجي مختلف -> بدله (Update)
             message.reactions[existingReactionIndex].emoji = emoji;
         }
     } else {
-        // أول مرة يتفاعل -> ضيفه (Add)
+        // Add new reaction
         message.reactions.push({ user: currentUser._id, emoji });
     }
 
     await message.save();
 
-    // 🔥🔥🔥 التعديل الجديد هنا 🔥🔥🔥
-    // لازم نعمل populate للرسايل قبل ما نبعتها
+    // Populate for frontend display
     const populatedMessage = await message.populate({
         path: "reactions.user",
-        select: "full_name username profile_picture"
+        select: "full_name username profile_picture",
     });
 
-    // 4. Socket.io (نبعت النسخة الـ populated)
-    const io = req.app.get("io");
+    // Broadcast Update
+    const socketPayload = {
+        messageId,
+        reactions: populatedMessage.reactions,
+    };
+
+    const ioInstance = req.app.get("io") || io;
+
     if (isGroupMsg) {
-        io.to(message.group.toString()).emit("messageReaction", {
-            messageId,
-            reactions: populatedMessage.reactions // 👈 نبعت الرياكشنز كاملة
-        });
+        ioInstance.to(message.group.toString()).emit("messageReaction", socketPayload);
     } else {
-        // في الشات الخاص بنبعت للطرفين
         const receiverSocket = getReceiverSocketId(message.receiver.toString());
         const senderSocket = getReceiverSocketId(message.sender.toString());
-        if (receiverSocket) io.to(receiverSocket).emit("messageReaction", { messageId, reactions: message.reactions });
-        if (senderSocket) io.to(senderSocket).emit("messageReaction", { messageId, reactions: message.reactions });
+
+        if (receiverSocket) ioInstance.to(receiverSocket).emit("messageReaction", socketPayload);
+        if (senderSocket) ioInstance.to(senderSocket).emit("messageReaction", socketPayload);
     }
 
     res.status(200).json({ success: true, reactions: message.reactions });

@@ -1,80 +1,111 @@
+/**
+ * @fileoverview Post Schema - Core model for user-generated content.
+ * Handles text, media, and social interactions (likes, comments, shares).
+ * Includes optimized indexing for feed generation and validation hooks.
+ * @version 1.1.0
+ * @author Senior Backend Architect
+ */
+
 import mongoose from "mongoose";
 
-const postSchema = new mongoose.Schema({
-    // 1. صاحب البوست (أهم حقل)
-    user: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
-        index: true // (مهم جداً) عشان لما تجيب بروفايل يوزر، يجيب بوستاته بسرعة
+const postSchema = new mongoose.Schema(
+    {
+        // --- Ownership ---
+        /**
+         * The user who created the post.
+         * Indexed for fast retrieval of specific user profiles/timelines.
+         */
+        user: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
+            index: true,
+        },
+
+        // --- Content ---
+        content: {
+            type: String,
+            trim: true,
+            default: "",
+        },
+
+        /**
+         * Array of image URLs hosted on external service (e.g., ImageKit/Cloudinary).
+         */
+        image_urls: [
+            {
+                type: String,
+            },
+        ],
+
+        post_type: {
+            type: String,
+            enum: ["text", "image", "video"],
+            default: "text",
+        },
+
+        // --- Visibility ---
+        isHidden: {
+            type: Boolean,
+            default: false,
+        },
+
+        // --- Social Interactions (Arrays of References) ---
+        // Note: arrays store user IDs. For massive scale, consider separate collections.
+
+        likes: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User",
+            },
+        ],
+
+        comments: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Comment",
+            },
+        ],
+
+        shares: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User",
+            },
+        ],
+
+        saves: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User",
+            },
+        ],
     },
+    {
+        timestamps: true, // Automatically manages createdAt and updatedAt
+    }
+);
 
-    // 2. المحتوى النصي
-    content: {
-        type: String,
-        trim: true, // يشيل المسافات الزيادة
-        default: "" // لو مفيش كلام، خليه فاضي مش null
-    },
+// ==========================================
+// --- Indexes (Performance Optimization) ---
+// ==========================================
 
-    // 3. الصور (مصفوفة لإن البوست ممكن يكون فيه كذا صورة)
-    // (استخدمنا الاسم image_urls عشان يمشي مع الكنترولر بتاعك)
-    image_urls: [{
-        type: String,
-        // ممكن تضيف validate هنا لو عايز تتأكد إنه رابط صورة صح
-    }],
-
-    // 4. نوع البوست (اختياري بس مفيد للفرونت إند)
-    post_type: {
-        type: String,
-        enum: ["text", "image", "video",], // القيم المسموحة بس
-        default: "text"
-    },
-
-    isHidden: {
-        type: Boolean,
-        default: false
-    },
-
-    // 5. اللايكات (مصفوفة IDs للناس اللي عملت لايك)
-    likes: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User"
-    }],
-
-    // 6. الكومنتات (نظام References)
-    // إحنا هنا بنخزن IDs الكومنتات، والكومنت نفسه في كولكشن منفصل
-    // (ده عشان الكنترولر بتاعك بيعمل Comment.create وبعدين يضيف الـ ID هنا)
-    comments: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Comment"
-    }],
-
-    // 7. الشيرات
-    shares: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User"
-    }],
-
-    saves: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User"
-    }]
-}, {
-    timestamps: true // بيضيف createdAt و updatedAt أوتوماتيك
-});
-
-
-// ========================================================
-// 🧠 المنطقة الذكية (Indexes & Performance)
-// ========================================================
-
-// 1. الفهرس المركب للـ Feed (أهم سطر في الملف ده) 🔥
-// إحنا دايماً في الـ Feed بنبحث بـ (user) وبنرتب بـ (createdAt)
-// الفهرس ده بيخلي العملية دي طيارة حتى لو عندك مليون بوست
+// 1. Compound Index for User Timelines
+// Optimizes queries like: "Get all posts by User X, sorted by newest."
 postSchema.index({ user: 1, createdAt: -1 });
 
-// 2. التحقق المنطقي (Validation Hook) 🛡️
-// قبل ما نسيف، نتأكد إن البوست مش فاضي (لازم يا كلام يا صور)
+// 2. Global Feed Index
+// Optimizes "Get all posts" queries for the general discovery feed.
+postSchema.index({ createdAt: -1 });
+
+// ==========================================
+// --- Middleware (Validation Logic) ---
+// ==========================================
+
+/**
+ * Pre-validate Hook
+ * Ensures a post is not empty (must contain either text content OR images).
+ */
 postSchema.pre("validate", function (next) {
     const hasContent = this.content && this.content.trim().length > 0;
     const hasImages = this.image_urls && this.image_urls.length > 0;
@@ -85,7 +116,6 @@ postSchema.pre("validate", function (next) {
         next();
     }
 });
-
 
 const Post = mongoose.model("Post", postSchema);
 export default Post;

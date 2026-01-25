@@ -1,145 +1,202 @@
+/**
+ * @fileoverview Socket.io Server Configuration
+ * Handles real-time connections, user presence (online/offline/hidden),
+ * message delivery status updates, and typing indicators for both 1-on-1 and Group chats.
+ * @version 1.2.0
+ * @author Senior Backend Architect
+ */
+
 import { Server } from "socket.io";
 import http from "http";
 import express from "express";
 import Message from "../models/Message.js";
-import User from "../models/User.js"; // 1. استيراد الموديل
+import User from "../models/User.js";
+
+// ==========================================
+// --- Server & Socket Initialization ---
+// ==========================================
 
 const app = express();
-
-// بنعمل سيرفر HTTP عادي وبنركب عليه السوكيت
 const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: ["http://localhost:5173"], // ⚠️ هام: تأكد إن ده رابط الفرونت إند بتاعك بالظبط
-        methods: ["GET", "POST"]
-    }
+        origin: [
+            "http://localhost:5173", // Development
+            "http://localhost:4173", // Preview Mode
+        ],
+        methods: ["GET", "POST"],
+    },
 });
 
-// 👇👇👇 السطر ده هو الحل 👇👇👇
-// بنربط الـ io بالـ app عشان نقدر نستخدمه في الكنترولرز (req.app.get('io'))
+// Bind io instance to the Express app for Controller access via req.app.get('io')
 app.set("io", io);
 
-// 🗺️ خريطة لتخزين اليوزرز (userId: socketId)
-// عشان نعرف نبعت رسالة لشخص معين باستخدام الـ ID بتاعه
-export const userSocketMap = {}; // {userId: socketId}
-const hiddenUsers = new Set();   // 2. قائمة الناس "الأشباح" (عشان نخفيهم من الأونلاين)
+// ==========================================
+// --- State Management ---
+// ==========================================
 
-// دالة مساعدة عشان نجيب الـ Socket ID بتاع أي حد
+/**
+ * Maps User IDs to their current Socket IDs.
+ * Structure: { [userId: string]: socketId }
+ */
+export const userSocketMap = {};
+
+/**
+ * Set of User IDs who have enabled "Ghost Mode" (Hide Online Status).
+ */
+const hiddenUsers = new Set();
+
+/**
+ * Helper: Retrieve the active socket ID for a specific user.
+ * @param {string} receiverId - The Database ID of the user.
+ * @returns {string|undefined} The socket ID or undefined if offline.
+ */
 export const getReceiverSocketId = (receiverId) => {
     return userSocketMap[receiverId];
 };
 
-io.on("connection", async (socket) => {
-    console.log("a user connected 🔌", socket.id);
+// ==========================================
+// --- Connection Handler ---
+// ==========================================
 
-    // 1. استلام الـ userId من الفرونت إند (هنشرحها في كود الفرونت)
+io.on("connection", async (socket) => {
+    console.log(`🔌 User Connected: ${socket.id}`);
+
+    // 1. Extract User ID from handshake query
     const userId = socket.handshake.query.userId;
 
-    // 2. تسجيل اليوزر إنه "أونلاين"
+    // 2. Validate & Register User
     if (userId && userId !== "undefined") {
         userSocketMap[userId] = socket.id;
 
-        // 3. لما اليوزر يتصل، شيك على الداتابيز
-        // هل هو مفعل "إخفاء الظهور" ولا لأ؟
+        // --- Privacy Check (Ghost Mode) ---
         try {
             const user = await User.findById(userId).select("hideOnlineStatus");
             if (user && user.hideOnlineStatus) {
-                hiddenUsers.add(userId); // ضيفه لقائمة الأشباح
+                hiddenUsers.add(userId);
             }
         } catch (error) {
-            console.error("Error fetching user privacy:", error);
+            console.error(`Error fetching privacy settings for ${userId}:`, error);
         }
 
-        // 👇 التريك هنا: أول ما يفتح، كل الرسايل اللي جاتله وهي مقفولة تبقى Delivered
+        // --- Message Delivery Logic (Mark pending messages as delivered) ---
         const markAsDelivered = async () => {
             try {
-                // 1. تحديث في الداتابيز
+                // A. Update Database: Mark all unread messages for this user as delivered
                 await Message.updateMany(
                     { receiver: userId, delivered: false },
                     { $set: { delivered: true } }
                 );
 
-                // 2. إبلاغ المرسلين (اللي فاتحين حالياً) إن رسايلهم وصلت
-                // بنجيب قائمة بالناس اللي باعتة رسايل لليوزر ده لسه موصلتش
+                // B. Notify Senders: Inform active senders that their messages were delivered
                 const senders = await Message.distinct("sender", { receiver: userId });
 
-                senders.forEach(senderId => {
+                senders.forEach((senderId) => {
                     const senderSocketId = userSocketMap[senderId.toString()];
                     if (senderSocketId) {
-                        // بنبعت إشارة للراسل: "رسايلك وصلت لليوزر ده"
-                        io.to(senderSocketId).emit("messagesDelivered", { toUserId: userId });
+                        io.to(senderSocketId).emit("messagesDelivered", {
+                            toUserId: userId,
+                        });
                     }
                 });
             } catch (err) {
-                console.error("Error updating delivered status:", err);
+                console.error(`Error syncing delivery status for ${userId}:`, err);
             }
         };
 
-        // 👇 الإضافة المهمة جداً: الاستماع لحدث "feedback" من الفرونت إند
-        // لما الفرونت يستلم رسالة ويقول "أنا استلمت"، السيرفر يبلغ الراسل
-        socket.on("messageReceivedConfirm", ({ messageId, senderId, receiverId }) => {
-            const senderSocket = userSocketMap[senderId];
-            if (senderSocket) {
-                // بلغ الراسل إن رسالته بقت Delivered
-                io.to(senderSocket).emit("messageDelivered", {
-                    messageId,
-                    toUserId: receiverId // عشان الراسل يعرف دي رسالة لمين
-                });
-            }
-
-            // (اختياري) تحديث الداتابيز إن الرسالة دي بقت delivered
-            // await Message.findByIdAndUpdate(messageId, { delivered: true });
-        });
+        // Execute delivery sync
         markAsDelivered();
     }
 
-
-    // 👇👇 لازم الكود ده يكون موجود عشان يدخل الروم 👇👇
-    socket.on("joinGroup", (groupId) => {
-        socket.join(groupId);
-        console.log(`User joined group room: ${groupId}`);
-    });
-
-    // 4. استمع لحدث "تغيير الحالة" من الفرونت (عشان السويتش يشتغل لحظياً)
-    socket.on("toggleOnlineStatus", ({ isHidden }) => {
-        if (isHidden) {
-            hiddenUsers.add(userId); // خبيه
-        } else {
-            hiddenUsers.delete(userId); // أظهره
-        }
-        // حدث القائمة للكل فوراً
-        emitOnlineUsers();
-    });
-
-    // 5. دالة إرسال القائمة (المعدلة)
+    // --- Broadcast Online Status ---
     const emitOnlineUsers = () => {
-        // هات كل الناس المتصلين
         const allOnlineUsers = Object.keys(userSocketMap);
-
-        // شيل منهم "الأشباح"
-        const visibleOnlineUsers = allOnlineUsers.filter(id => !hiddenUsers.has(id));
-
-        // ابعت القائمة النظيفة
+        // Filter out users who are in hiddenUsers set
+        const visibleOnlineUsers = allOnlineUsers.filter(
+            (id) => !hiddenUsers.has(id)
+        );
         io.emit("getOnlineUsers", visibleOnlineUsers);
     };
 
-    // ابعت القائمة أول ما يدخل
+    // Initial broadcast upon connection
     emitOnlineUsers();
 
-    // 4. عند قطع الاتصال (قفل المتصفح)
-    socket.on("disconnect", async () => { // 👈 خليناها async
-        console.log("user disconnected ❌", socket.id);
+    // ==========================================
+    // --- Event Listeners ---
+    // ==========================================
 
-        // 👇👇 الإضافة الجديدة: تحديث آخر ظهور 👇👇
+    // 1. Real-time Delivery Confirmation (Feedback from Client)
+    socket.on(
+        "messageReceivedConfirm",
+        ({ messageId, senderId, receiverId }) => {
+            const senderSocket = userSocketMap[senderId];
+            if (senderSocket) {
+                io.to(senderSocket).emit("messageDelivered", {
+                    messageId,
+                    toUserId: receiverId,
+                });
+            }
+        }
+    );
+
+    // 2. Group Chat: Join Room
+    socket.on("joinGroup", (groupId) => {
+        socket.join(groupId);
+        console.log(`User ${userId || "Anon"} joined group: ${groupId}`);
+    });
+
+    // 3. Status Toggle (Online/Invisible)
+    socket.on("toggleOnlineStatus", ({ isHidden }) => {
+        if (isHidden) {
+            hiddenUsers.add(userId);
+        } else {
+            hiddenUsers.delete(userId);
+        }
+        emitOnlineUsers(); // Refresh lists for everyone
+    });
+
+    // 4. Typing Indicators (1-on-1)
+    socket.on("typing", (receiverId) => {
+        const receiverSocketId = userSocketMap[receiverId];
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("typing");
+        }
+    });
+
+    socket.on("stop typing", (receiverId) => {
+        const receiverSocketId = userSocketMap[receiverId];
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("stop typing");
+        }
+    });
+
+    // 5. Typing Indicators (Group)
+    socket.on("typingGroup", ({ groupId, username, image }) => {
+        socket.to(groupId).emit("typingGroup", { username, image });
+    });
+
+    socket.on("stop typingGroup", (groupId) => {
+        socket.to(groupId).emit("stop typingGroup");
+    });
+
+    // 6. Disconnection Handler
+    socket.on("disconnect", async () => {
+        console.log(`❌ User Disconnected: ${socket.id}`);
+
         if (userId) {
-            // نحدث الوقت الحالي في الداتابيز
-            await User.findByIdAndUpdate(userId, { lastSeen: new Date() });
+            // Update Last Seen in DB
+            try {
+                await User.findByIdAndUpdate(userId, { lastSeen: new Date() });
+            } catch (error) {
+                console.error(`Error updating lastSeen for ${userId}:`, error);
+            }
 
+            // Cleanup Maps
             delete userSocketMap[userId];
-            // لازم كمان نشيله من الـ hiddenUsers لو كان فيها
             hiddenUsers.delete(userId);
 
+            // Broadcast new list
             io.emit("getOnlineUsers", Object.keys(userSocketMap));
         }
     });

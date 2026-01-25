@@ -1,5 +1,9 @@
 import express from "express";
+
+// --- Middlewares ---
 import { protect } from "../middlewares/auth.js";
+
+// --- Controllers ---
 import {
     sendConnectionRequest,
     getUserConnections,
@@ -7,38 +11,97 @@ import {
     rejectConnectionRequest,
     blockUser,
     unblockUser,
-    removeConnection
+    removeConnection,
 } from "../controllers/connectionController.js";
-import { followUser, unfollowUser } from "../controllers/userController.js";
-// (ملحوظة: لو لسه معملتش نقل لـ follow/unfollow للكنترولر ده، استوردهم من userController مؤقتاً)
 
+import {
+    followUser,
+    unfollowUser,
+} from "../controllers/userController.js";
+
+/**
+ * Connection Router
+ * -----------------
+ * Manages the social graph edges:
+ * 1. Friend Requests (Send/Accept/Reject)
+ * 2. Relationship Management (Get List/Remove Friend)
+ * 3. Safety (Block/Unblock)
+ * 4. Graph Actions (Follow/Unfollow)
+ *
+ * @basePath /api/connection
+ */
 const connectionRouter = express.Router();
 
-// ============= (الروابط بتاعتنا) =============
+// ========================================================
+// 🤝 Request Lifecycle (Send, Accept, Reject)
+// ========================================================
 
-// 1. Send Request
+/**
+ * @route POST /api/connection/send
+ * @desc Initiate a friend request
+ */
 connectionRouter.post("/send", protect, sendConnectionRequest);
 
-// 2. 👇👇 التعديل هنا: شيلنا "/get" وخليناها "/" بس 👇👇
-// عشان الفرونت بينادي على /api/connection علطول
-connectionRouter.get("/", protect, getUserConnections);
-
-// 3. Accept Request
+/**
+ * @route POST /api/connection/accept/:requestId
+ * @desc Accept an incoming friend request
+ */
 connectionRouter.post("/accept/:requestId", protect, acceptConnection);
 
-// 4. Reject Request
+/**
+ * @route POST /api/connection/reject/:id
+ * @desc Reject/Ignore an incoming friend request
+ */
 connectionRouter.post("/reject/:id", protect, rejectConnectionRequest);
 
-connectionRouter.put("/remove/:userId", protect, removeConnection)
+// ========================================================
+// 📋 Connection Management (List & Cleanup)
+// ========================================================
 
+/**
+ * @route GET /api/connection/
+ * @desc Get all connections (Friends/Pending Requests)
+ * @note Optimized to "/" based on frontend requirement.
+ */
+connectionRouter.get("/", protect, getUserConnections);
 
-// 5. Block / Unblock
+/**
+ * @route PUT /api/connection/remove/:userId
+ * @desc Unfriend a user (Remove existing connection)
+ */
+connectionRouter.put("/remove/:userId", protect, removeConnection);
+
+// ========================================================
+// 🛡️ Safety & Blocking
+// ========================================================
+
+/**
+ * @route POST /api/connection/block/:id
+ * @desc Block a user (prevents interaction)
+ */
 connectionRouter.post("/block/:id", protect, blockUser);
+
+/**
+ * @route POST /api/connection/unblock/:id
+ * @desc Unblock a previously blocked user
+ */
 connectionRouter.post("/unblock/:id", protect, unblockUser);
 
-// 6. 👇👇 (مهم جداً) ضيفنا دول عشان الفرونت بيستخدمهم هنا 👇👇
-// لو لسه منقلتهمش، لازم تعملهم import وتضيفهم هنا
+// ========================================================
+// 👣 Social Graph (Follow System)
+// ========================================================
+
+/**
+ * @route POST /api/connection/follow/:id
+ * @desc Follow a user (One-way relationship)
+ * @note Imported from userController as per current architecture.
+ */
 connectionRouter.post("/follow/:id", protect, followUser);
+
+/**
+ * @route POST /api/connection/unfollow/:id
+ * @desc Unfollow a user
+ */
 connectionRouter.post("/unfollow/:id", protect, unfollowUser);
 
 export default connectionRouter;

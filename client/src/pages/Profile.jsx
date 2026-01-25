@@ -1,316 +1,820 @@
-import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+    Grid,
+    Image,
+    Edit3,
+    Settings,
+    Maximize2,
+    UserPlus,
+    MessageCircle,
+    ShieldAlert,
+    Camera,
+    BadgeCheck,
+    X,
+    Ban,
+    Lock,
+    Clock,
+    UserCheck,
+    ChevronDown,
+    UserX,
+    Bookmark,
+    Loader2,
+} from "lucide-react";
 
+// --- Local Imports ---
+import api from "../lib/axios";
+import { fetchMyConnections } from "../features/connectionsSlice";
+import PostCard from "../components/feed/PostCard";
+import UserAvatar from "../components/common/UserDefaultAvatar.jsx";
 
+// --- Lazy Load Modals ---
+const UpdateProfileModal = lazy(() => import("../components/modals/UpdateProfileModal.jsx"));
 
-// Components & Utils
-import PostCard from "../components/PostCard";
-import UpdateProfileModal from "../components/UpdateProfileModal";
-import Loading from "../components/Loading";
-import api from "../api/axios"; // السنترال بتاعنا
+// --- Constants & Utils ---
+const isSameId = (id1, id2) => {
+    if (!id1 || !id2) return false;
+    return id1.toString() === id2.toString();
+};
 
-// Icons (للتجميل)
-import { Grid, Image, Edit2, UserPlus, UserCheck, ShieldBan, ShieldCheck } from "lucide-react";
-import UserAvatar from "../components/UserDefaultAvatar.jsx";
+const TABS = [
+    { id: "posts", label: "POSTS", icon: Grid },
+    { id: "media", label: "MEDIA", icon: Image },
+    { id: "saved", label: "SAVED", icon: Bookmark, private: true },
+];
 
+/**
+ * Profile Component
+ *
+ * Displays a user's profile with cover photo, avatar, stats, and content tabs (Posts, Media, Saved).
+ * Handles profile actions like Follow, Connect, Block, and Edit.
+ */
 const Profile = () => {
-    const { profileId } = useParams(); // الـ ID من الرابط (لو موجود)
-    const { currentUser } = useSelector((state) => state.user); // أنا
+    const { profileId } = useParams();
     const { getToken } = useAuth();
+    const dispatch = useDispatch();
+    const navigate = useNavigate();
 
-    // Local State (للبيانات اللي بتخص الصفحة دي بس)
-    const [profileUser, setProfileUser] = useState(null); // صاحب البروفايل
-    const [posts, setPosts] = useState([]); // بوستاته
+    // --- Redux State ---
+    const { currentUser } = useSelector((state) => state.user);
+
+    // --- Derived State ---
+    const targetProfileId = useMemo(
+        () => profileId || (currentUser ? currentUser._id : null),
+        [profileId, currentUser]
+    );
+
+    const isMyProfile = useMemo(
+        () => currentUser && targetProfileId && isSameId(targetProfileId, currentUser._id),
+        [currentUser, targetProfileId]
+    );
+
+    // --- Local State ---
+    const [profileUser, setProfileUser] = useState(null);
+    const [posts, setPosts] = useState([]);
     const [activeTab, setActiveTab] = useState("posts");
     const [showEdit, setShowEdit] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [actionLoading, setActionLoading] = useState(false);
+    const [selectedImage, setSelectedImage] = useState(null);
+    const [showConnectionMenu, setShowConnectionMenu] = useState(false);
 
-    // 1. تحديد الهوية: هل ده بروفايلي؟
-    // لو مفيش profileId في الرابط، أو الـ profileId هو هو الـ ID بتاعي
-    const isMyProfile = !profileId || (currentUser && profileId === currentUser._id);
+    const [savedPosts, setSavedPosts] = useState([]);
+    const [savedLoading, setSavedLoading] = useState(false);
+    const [isSavedFetched, setIsSavedFetched] = useState(false);
 
-    // 2. جلب البيانات (The Data Fetcher) 🏗️
-    const fetchProfileData = async () => {
+    const [connectionStatus, setConnectionStatus] = useState("none");
+    const [followStatus, setFollowStatus] = useState("none");
+
+    // --- Data Fetching ---
+
+    // 1. Fetch Profile Data
+    useEffect(() => {
+        let isMounted = true;
+
+        const fetchProfileData = async () => {
+            try {
+                const token = await getToken();
+                if (!targetProfileId) return;
+
+                // Reset States on ID change
+                if (profileUser && !isSameId(profileUser._id, targetProfileId)) {
+                    setProfileUser(null);
+                    setPosts([]);
+                    setSavedPosts([]);
+                    setIsSavedFetched(false);
+                    setConnectionStatus("none");
+                    setFollowStatus("none");
+                    setActiveTab("posts");
+                }
+
+                setLoading(true);
+                const { data } = await api.get(`/post/user/${targetProfileId}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+
+                if (isMounted && data.success) {
+                    setProfileUser(data.user);
+                    setPosts(data.posts || []);
+                    setConnectionStatus(data.connectionStatus);
+                    setFollowStatus(data.followStatus);
+                }
+            } catch (error) {
+                console.error("Fetch Error:", error);
+            } finally {
+                if (isMounted) setLoading(false);
+            }
+        };
+
+        if (targetProfileId) fetchProfileData();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [targetProfileId, getToken]); // Removed profileUser dependency to prevent loops, managed logic inside
+
+    // 2. Fetch Saved Posts (Lazy)
+    useEffect(() => {
+        if (activeTab === "saved" && isMyProfile && !isSavedFetched) {
+            const fetchSaved = async () => {
+                setSavedLoading(true);
+                try {
+                    const token = await getToken();
+                    const { data } = await api.get("/post/saved", {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (data.success) {
+                        setSavedPosts(data.posts || []);
+                        setIsSavedFetched(true);
+                    }
+                } catch (error) {
+                    toast.error("Failed to load saved posts");
+                } finally {
+                    setSavedLoading(false);
+                }
+            };
+            fetchSaved();
+        }
+    }, [activeTab, isMyProfile, isSavedFetched, getToken]);
+
+    // --- Handlers (Memoized) ---
+
+    const handleFollowToggle = useCallback(async () => {
+        if (actionLoading || !profileUser) return;
+
+        const oldStatus = followStatus;
+        const isPrivate = profileUser.isPrivate;
+
+        // Optimistic UI Update
+        if (followStatus === "following" || followStatus === "requested") {
+            setFollowStatus("none");
+            setProfileUser((prev) => ({
+                ...prev,
+                followers: prev.followers.filter((id) => id !== currentUser._id),
+            }));
+        } else {
+            setFollowStatus(isPrivate ? "requested" : "following");
+            if (!isPrivate) {
+                setProfileUser((prev) => ({
+                    ...prev,
+                    followers: [...prev.followers, currentUser._id],
+                }));
+            }
+        }
+
         try {
+            setActionLoading(true);
             const token = await getToken();
-
-            // 1. حساب الـ Target ID
-            const targetId = profileId || (currentUser ? currentUser._id : null);
-
-            // 👮‍♂️ الحارس: لو مفيش ID، وقف فوراً ومتعملش Loading حتى
-            if (!targetId) {
-                console.log("⏳ Waiting for user ID...");
-                return;
-            }
-
-            setLoading(true); // شغل اللودينج هنا بس لما نتأكد إن معانا ID
-
-            console.log("🚀 Fetching profile for:", targetId);
-
-            const { data } = await api.get(`/post/user/${targetId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            if (data.success) {
-                setProfileUser(data.user);
-                setPosts(data.posts);
-            }
+            const route =
+                oldStatus === "following" || oldStatus === "requested" ? "unfollow" : "follow";
+            const { data } = await api.post(
+                `/user/${route}/${profileUser._id}`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (data.status) setFollowStatus(data.status);
         } catch (error) {
-            console.error("Fetch Error:", error);
-            // toast.error("Failed to load profile."); // (ممكن تشيل التوست عشان ميزعجش اليوزر لو خطأ بسيط)
+            setFollowStatus(oldStatus); // Revert on error
+            toast.error("Action failed");
         } finally {
-            setLoading(false);
+            setActionLoading(false);
         }
-    };
+    }, [actionLoading, profileUser, followStatus, currentUser._id, getToken]);
 
-    useEffect(() => {
-        // شغل الفانكشن لو:
-        // 1. فيه profileId في الرابط (يعني بزور حد)
-        // 2. أو.. أنا موجود بالفعل (currentUser loaded) ومعنديش profileId (يعني بزور نفسي)
-        if (profileId || currentUser) {
-            fetchProfileData();
-        }
-    }, [profileId, currentUser?._id]); // (هتشتغل تاني أول ما currentUser يوصل بالسلامة)
-
-    // ========================================================
-    // 2️⃣ الـ Effect الجديد: (وظيفته يحدث الشاشة فوراً بعد التعديل)
-    // ========================================================
-    useEffect(() => {
-        // لو أنا فاتح بروفايلي، والـ Redux اتغير (بسبب التعديل)
-        // حدث الـ Local State فوراً بالبيانات الجديدة
-        if (isMyProfile && currentUser) {
-            setProfileUser(currentUser);
-        }
-    }, [currentUser, isMyProfile]);
-
-
-    // 3. التفاعلات (Actions) 🎮
-
-    // أ) الفولو / أنفولو
-    const handleFollowToggle = async () => {
+    const handleConnect = useCallback(async () => {
+        setConnectionStatus("sent");
         try {
             const token = await getToken();
-            // بنستخدم الراوتات اللي عملناها في connectionRoutes (أو user حسب ما استقريت)
-            // لو هنمشي بنظام connection request:
-            const { data } = await api.post(`/connection/request/${profileUser._id}`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            // أو لو نظام فولو مباشر:
-            // const endpoint = isFollowing ? "/user/unfollow" : "/user/follow";
-
-            if (data.success) {
-                toast.success(data.message);
-                // تحديث سريع للواجهة (Optimistic UI update ممكن يتعمل هنا)
-                fetchProfileData(); // أو نحمل البيانات تاني للأمان
-            }
+            await api.post(
+                "/connection/send",
+                { receiverId: profileUser._id },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            toast.success("Request sent! 🚀");
+            dispatch(fetchMyConnections(token));
         } catch (error) {
-            toast.error(error.response?.data?.message || "Action failed");
+            setConnectionStatus("none");
+            toast.error(error.response?.data?.message || "Failed");
         }
-    };
+    }, [profileUser, getToken, dispatch]);
 
-    // ب) البلوك / أنبلوك
-    const handleBlockToggle = async () => {
-        if (!confirm("Are you sure?")) return; // تأكيد للأمان
+    const handleAcceptRequest = useCallback(async () => {
         try {
             const token = await getToken();
-            const endpoint = `/connection/${profileUser?.isBlocked ? "unblock" : "block"}/${profileUser._id}`;
+            await api.post(
+                `/connection/accept/${profileUser._id}`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            toast.success("Connected! 🎉");
+            setConnectionStatus("connected");
+            dispatch(fetchMyConnections(token));
+        } catch (error) {
+            toast.error("Failed to accept");
+        }
+    }, [profileUser, getToken, dispatch]);
 
-            const { data } = await api.post(endpoint, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+    const handleRemoveConnection = useCallback(async () => {
+        if (!window.confirm("Remove connection?")) return;
 
+        const previousStatus = connectionStatus;
+        setConnectionStatus("none");
+
+        try {
+            const token = await getToken();
+            await api.put(
+                `/connection/remove/${profileUser._id}`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            toast.success("Connection removed");
+            dispatch(fetchMyConnections(token));
+        } catch (error) {
+            setConnectionStatus(previousStatus);
+            toast.error("Failed");
+        }
+    }, [profileUser, connectionStatus, getToken, dispatch]);
+
+    const handleBlockToggle = useCallback(async () => {
+        const isBlockedByMe =
+            profileUser?.isBlockedByMe ||
+            currentUser?.blockedUsers?.some((id) => isSameId(id, profileUser?._id));
+
+        if (!confirm(`Are you sure you want to ${isBlockedByMe ? "unblock" : "block"} this user?`))
+            return;
+
+        try {
+            const token = await getToken();
+            const endpoint = `/connection/${isBlockedByMe ? "unblock" : "block"}/${profileUser._id}`;
+            const { data } = await api.post(
+                endpoint,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
             if (data.success) {
                 toast.success(data.message);
-                fetchProfileData(); // تحديث الصفحة
+                window.location.reload();
             }
         } catch (error) {
-            toast.error("Failed to update block status");
+            toast.error("Failed");
         }
-    };
+    }, [profileUser, currentUser, getToken]);
 
-
-    // 1. لو لسه بيحمل بجد -> اعرض السبينر
-    if (loading) return <Loading />;
-
-    // 2. لو خلص تحميل، ولسه مفيش يوزر (يعني الـ API فشل) -> اعرض رسالة خطأ
-    if (!profileUser) return (
-        <div className="min-h-screen flex flex-col items-center justify-center text-white">
-            <h2 className="text-2xl font-bold text-red-500">User not found 😕</h2>
-            <p className="text-gray-400">Make sure the URL is correct or try again later.</p>
-        </div>
+    // --- Derived View State ---
+    const isBlockedByMe = useMemo(
+        () =>
+            profileUser?.isBlockedByMe ||
+            currentUser?.blockedUsers?.some((id) => isSameId(id, profileUser?._id)),
+        [profileUser, currentUser]
     );
 
-    // لو معمول له بلوك، نخفي البوستات
-    const isBlocked = profileUser.isBlocked; // (حسب ما الباك إند بيرجعها)
+    const isBlockedByTarget = profileUser?.isBlockedByTarget;
+    const isRestricted = isBlockedByMe || isBlockedByTarget;
+    const isPrivateAccount = profileUser?.isPrivate;
+    const isContentLocked = !isMyProfile && isPrivateAccount && followStatus !== "following";
+
+    // --- Render ---
+
+    if (loading)
+        return (
+            <div className="min-h-screen bg-main flex items-center justify-center">
+                <Loader2 className="w-10 h-10 text-primary animate-spin" />
+            </div>
+        );
+
+    if (!profileUser)
+        return (
+            <div className="min-h-screen bg-main flex items-center justify-center text-muted">
+                User Unavailable
+            </div>
+        );
 
     return (
-        <div className="min-h-screen bg-[#0f172a] text-white pb-20">
-            {/* --- Cover & Header --- */}
-            <div className="relative ">
+        <div className="min-h-screen bg-main text-content pb-20 transition-colors duration-300">
+            {/* 1. Hero Section */}
+            <div className="relative">
+                <ProfileHero
+                    profileUser={profileUser}
+                    isRestricted={isRestricted}
+                    isMyProfile={isMyProfile}
+                    onEditClick={() => setShowEdit(true)}
+                />
 
-                {/* 1. Cover Image Container */}
-                <div className="h-48 md:h-80 w-full relative group overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10" /> {/* طبقة تظليل عشان الكلام يبان */}
-                    {profileUser.cover_photo ? (
-                        <img
-                            src={profileUser.cover_photo}
-                            alt="cover"
-                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                        />
-                    ) : (
-                        <div className="w-full h-full bg-gradient-to-r from-purple-900 to-indigo-900" />
-                    )}
-                </div>
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-20">
+                    <div className="relative -mt-24 md:-mt-32 bg-gradient-to-b from-surface/80 via-surface/95 to-main backdrop-blur-2xl border border-adaptive rounded-3xl p-6 md:p-8 shadow-2xl">
+                        <div className="flex flex-col md:flex-row gap-6 relative z-10">
 
-                {/* 2. Profile Info Container (Z-Index عالي عشان يطلع فوق) */}
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 relative z-20 -mt-16 md:-mt-24 flex flex-col md:flex-row items-center md:items-end gap-4 md:gap-6">
-
-                    {/* Profile Picture */}
-                    <div className="relative group">
-                        <div className="w-32 h-32 md:w-44 md:h-44 rounded-full p-1 bg-black shadow-2xl">
-                            {/* 👇👇👇 سطر واحد بس بيقوم بالواجب 👇👇👇 */}
-                            <UserAvatar
-                                user={profileUser}
-                                className="w-full h-full border-4 border-gray-800 bg-gray-800"
+                            {/* Avatar */}
+                            <ProfileAvatar
+                                profileUser={profileUser}
+                                isRestricted={isRestricted}
+                                isMyProfile={isMyProfile}
+                                onEditClick={() => setShowEdit(true)}
                             />
+
+                            {/* Info & Actions */}
+                            <div className="flex-1 flex flex-col md:justify-end pt-2">
+                                <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-5">
+
+                                    {/* Text Info */}
+                                    <ProfileInfo
+                                        profileUser={profileUser}
+                                        isBlockedByMe={isBlockedByMe}
+                                        isBlockedByTarget={isBlockedByTarget}
+                                    />
+
+                                    {/* Action Buttons */}
+                                    <ProfileActions
+                                        isMyProfile={isMyProfile}
+                                        isBlockedByMe={isBlockedByMe}
+                                        isBlockedByTarget={isBlockedByTarget}
+                                        profileUser={profileUser}
+                                        followStatus={followStatus}
+                                        connectionStatus={connectionStatus}
+                                        showConnectionMenu={showConnectionMenu}
+                                        setShowConnectionMenu={setShowConnectionMenu}
+                                        onEdit={() => setShowEdit(true)}
+                                        onBlock={handleBlockToggle}
+                                        onFollow={handleFollowToggle}
+                                        onConnect={handleConnect}
+                                        onAccept={handleAcceptRequest}
+                                        onRemoveConnection={handleRemoveConnection}
+                                        onMessage={() => navigate(`/messages/${profileUser._id}`)}
+                                    />
+                                </div>
+
+                                {/* Stats & Bio */}
+                                {!isRestricted && (
+                                    <>
+                                        <p className="mt-6 text-content/80 text-sm md:text-base leading-relaxed text-center md:text-left font-medium max-w-3xl mx-auto md:mx-0">
+                                            {profileUser.bio || "No bio available."}
+                                        </p>
+                                        <ProfileStats
+                                            postsCount={posts.length}
+                                            profileUser={profileUser}
+                                            isContentLocked={isContentLocked}
+                                            navigate={navigate}
+                                        />
+                                    </>
+                                )}
+                            </div>
                         </div>
-                        {isMyProfile && (
-                            <button
-                                onClick={() => setShowEdit(true)}
-                                className="absolute bottom-2 right-2 p-2.5 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition shadow-lg border-2 border-black cursor-pointer"
-                                title="Edit Profile"
-                            >
-                                <Edit2 size={18} />
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Name & Stats */}
-                    <div className="flex-1 text-center md:text-left mb-2 md:mb-6">
-                        <h1 className="text-2xl md:text-4xl font-bold text-white tracking-wide">{profileUser.full_name}</h1>
-                        <p className="text-gray-400 font-medium">@{profileUser.username}</p>
-
-                        {/* Bio */}
-                        <p className="mt-3 text-gray-300 max-w-md mx-auto md:mx-0 leading-relaxed text-sm md:text-base">
-                            {profileUser.bio || "✨ No bio yet..."}
-                        </p>
-
-                        {/* Stats */}
-                        <div className="flex justify-center md:justify-start gap-6 mt-4 text-sm md:text-base">
-                            <div className="flex flex-col items-center md:items-start cursor-pointer hover:opacity-80">
-                                <span className="text-white font-bold text-lg">{profileUser.followers?.length || 0}</span>
-                                <span className="text-gray-500 text-xs uppercase tracking-wider">Followers</span>
-                            </div>
-                            <div className="flex flex-col items-center md:items-start cursor-pointer hover:opacity-80">
-                                <span className="text-white font-bold text-lg">{profileUser.following?.length || 0}</span>
-                                <span className="text-gray-500 text-xs uppercase tracking-wider">Following</span>
-                            </div>
-                            <div className="flex flex-col items-center md:items-start">
-                                <span className="text-white font-bold text-lg">{posts.length}</span>
-                                <span className="text-gray-500 text-xs uppercase tracking-wider">Posts</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="mb-6 md:mb-8 flex gap-3">
-                        {isMyProfile ? (
-                            <button
-                                onClick={() => setShowEdit(true)}
-                                className="px-6 py-2.5 bg-white text-black hover:bg-gray-200 rounded-xl font-bold transition shadow-lg active:scale-95"
-                            >
-                                Edit Profile
-                            </button>
-                        ) : (
-                            <>
-                                <button
-                                    onClick={handleFollowToggle}
-                                    className={`px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition shadow-lg active:scale-95 ${profileUser.isFollowed
-                                        ? "bg-transparent border-2 border-gray-600 text-gray-300 hover:border-red-500 hover:text-red-500"
-                                        : "bg-purple-600 hover:bg-purple-700 text-white"
-                                        }`}
-                                >
-                                    {profileUser.isFollowed ? "Unfollow" : "Follow"}
-                                </button>
-
-                                <button
-                                    onClick={handleBlockToggle}
-                                    className="p-3 bg-gray-800/50 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-xl border border-gray-700 transition"
-                                    title="Block User"
-                                >
-                                    {profileUser.isBlocked ? <ShieldCheck size={20} /> : <ShieldBan size={20} />}
-                                </button>
-                            </>
-                        )}
                     </div>
                 </div>
             </div>
 
-            {/* --- Content Tabs --- */}
-            {!isBlocked && (
-                <div className="max-w-4xl mx-auto mt-8 px-4">
-                    <div className="flex border-b border-gray-800 mb-6 sticky top-0 bg-black/80 backdrop-blur-md z-30 pt-2">
-                        <button
-                            onClick={() => setActiveTab("posts")}
-                            className={`flex-1 pb-4 text-center font-medium transition relative ${activeTab === "posts" ? "text-purple-400" : "text-gray-500 hover:text-gray-300"}`}
-                        >
-                            <span className="flex justify-center items-center gap-2"><Grid size={18} /> Posts</span>
-                            {activeTab === "posts" && <div className="absolute bottom-0 left-0 w-full h-1 bg-purple-500 rounded-t-full shadow-[0_-2px_10px_rgba(168,85,247,0.5)]" />}
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("media")}
-                            className={`flex-1 pb-4 text-center font-medium transition relative ${activeTab === "media" ? "text-purple-400" : "text-gray-500 hover:text-gray-300"}`}
-                        >
-                            <span className="flex justify-center items-center gap-2"><Image size={18} /> Media</span>
-                            {activeTab === "media" && <div className="absolute bottom-0 left-0 w-full h-1 bg-purple-500 rounded-t-full shadow-[0_-2px_10px_rgba(168,85,247,0.5)]" />}
-                        </button>
-                    </div>
+            {/* 2. Content Tabs */}
+            {!isRestricted && (
+                isContentLocked ? (
+                    <PrivateAccountState />
+                ) : (
+                    <div className="max-w-5xl mx-auto mt-8 px-4">
+                        <TabNavigation
+                            activeTab={activeTab}
+                            setActiveTab={setActiveTab}
+                            isMyProfile={isMyProfile}
+                        />
 
-                    {/* Posts Grid/List */}
-                    <div className="min-h-[300px]">
-                        {activeTab === "posts" ? (
-                            posts.length > 0 ? (
-                                <div className="space-y-6 flex flex-col items-center">
-                                    {posts.map(post => <PostCard key={post._id} post={post} />)}
-                                </div>
-                            ) : (
-                                <div className="text-center py-20">
-                                    <div className="bg-gray-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <Grid size={40} className="text-gray-600" />
-                                    </div>
-                                    <h3 className="text-xl font-bold text-gray-400">No Posts Yet</h3>
-                                    <p className="text-gray-600 mt-2">When you share photos and videos, they'll appear here.</p>
-                                </div>
-                            )
-                        ) : (
-                            <div className="grid grid-cols-3 gap-1 md:gap-4">
-                                {posts
-                                    .filter(p => p.image_urls?.length > 0)
-                                    .flatMap(p => p.image_urls)
-                                    .map((url, i) => (
-                                        <div key={i} className="aspect-square rounded-xl overflow-hidden cursor-pointer hover:opacity-90 transition group relative">
-                                            <img src={url} alt="media" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                                            <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition" />
-                                        </div>
-                                    ))
-                                }
-                                {/* رسالة لو مفيش ميديا */}
-                                {posts.filter(p => p.image_urls?.length > 0).length === 0 && (
-                                    <div className="col-span-3 text-center py-20 text-gray-500">No photos or videos yet.</div>
-                                )}
-                            </div>
-                        )}
+                        <AnimatePresence mode="wait">
+                            {activeTab === "posts" && (
+                                <PostsGrid key="posts" posts={posts} />
+                            )}
+
+                            {activeTab === "media" && (
+                                <MediaGrid
+                                    key="media"
+                                    posts={posts}
+                                    onImageClick={setSelectedImage}
+                                />
+                            )}
+
+                            {activeTab === "saved" && isMyProfile && (
+                                <SavedGrid
+                                    key="saved"
+                                    posts={savedPosts}
+                                    loading={savedLoading}
+                                />
+                            )}
+                        </AnimatePresence>
                     </div>
-                </div>
+                )
             )}
 
-            {/* Edit Modal */}
-            {showEdit && <UpdateProfileModal setShowEdit={setShowEdit} />}
+            {/* 3. Modals */}
+            <Suspense fallback={null}>
+                {showEdit && <UpdateProfileModal setShowEdit={setShowEdit} />}
+            </Suspense>
+
+            <ImageModal
+                selectedImage={selectedImage}
+                onClose={() => setSelectedImage(null)}
+            />
         </div>
     );
 };
+
+// --- Sub-Components (Memoized for Performance) ---
+
+const ProfileHero = React.memo(({ profileUser, isRestricted, isMyProfile, onEditClick }) => (
+    <div className="h-64 md:h-80 w-full relative overflow-hidden group">
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/80 z-10"></div>
+        {!isRestricted && profileUser.cover_photo ? (
+            <motion.img
+                initial={{ scale: 1.1 }}
+                animate={{ scale: 1 }}
+                transition={{ duration: 1.5 }}
+                src={profileUser.cover_photo}
+                className="w-full h-full object-cover"
+                alt="cover"
+            />
+        ) : (
+            <div className={`w-full h-full ${isRestricted ? "bg-black/90" : "bg-gradient-to-br from-primary/80 to-black"}`}></div>
+        )}
+        {isMyProfile && (
+            <button
+                onClick={onEditClick}
+                className="absolute top-4 right-4 z-20 p-2.5 bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full text-white transition-all opacity-0 group-hover:opacity-100 hover:scale-110 cursor-pointer"
+            >
+                <Camera size={20} />
+            </button>
+        )}
+    </div>
+));
+
+const ProfileAvatar = React.memo(({ profileUser, isRestricted, isMyProfile, onEditClick }) => (
+    <div className="flex -mt-16 md:-mt-20 items-center justify-center md:justify-start shrink-0">
+        <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className={`relative group mt-16 md:mt-0 ${isRestricted ? "pointer-events-none cursor-default md:mt-16" : "cursor-pointer"
+                }`}
+        >
+            <UserAvatar
+                user={profileUser}
+                className={`w-32 h-32 md:w-44 md:h-44 rounded-full object-cover shadow-2xl ${isRestricted ? "grayscale opacity-50 ring-0" : ""
+                    }`}
+            />
+            {isMyProfile && !isRestricted && (
+                <button
+                    onClick={onEditClick}
+                    className="absolute bottom-2 right-2 p-2.5 bg-primary text-white rounded-full shadow-lg ring-4 ring-surface z-20 pointer-events-auto cursor-pointer hover:scale-110 transition-transform"
+                >
+                    <Edit3 size={18} />
+                </button>
+            )}
+        </motion.div>
+    </div>
+));
+
+const ProfileInfo = React.memo(({ profileUser, isBlockedByMe, isBlockedByTarget }) => (
+    <div className="text-center md:text-left space-y-1">
+        <h1 className="text-3xl md:text-4xl font-black text-content flex items-center justify-center md:justify-start gap-2">
+            {profileUser.full_name}
+            {profileUser.isVerified && (
+                <BadgeCheck className="w-6 h-6 md:w-8 md:h-8 text-primary fill-primary/10" />
+            )}
+        </h1>
+        <p className="text-muted font-medium text-base md:text-lg">@{profileUser.username}</p>
+
+        {isBlockedByMe && (
+            <p className="text-red-500 font-bold text-sm mt-1 flex items-center gap-1 justify-center md:justify-start bg-red-500/10 px-3 py-1 rounded-full w-fit mx-auto md:mx-0">
+                <Ban size={14} /> You blocked this user
+            </p>
+        )}
+        {isBlockedByTarget && (
+            <p className="text-muted font-bold text-sm mt-1 flex items-center gap-1 justify-center md:justify-start bg-surface px-3 py-1 rounded-full w-fit mx-auto md:mx-0 border border-adaptive">
+                <Lock size={14} /> User unavailable
+            </p>
+        )}
+    </div>
+));
+
+const ProfileActions = React.memo(({
+    isMyProfile,
+    isBlockedByMe,
+    isBlockedByTarget,
+    profileUser,
+    followStatus,
+    connectionStatus,
+    showConnectionMenu,
+    setShowConnectionMenu,
+    onEdit,
+    onBlock,
+    onFollow,
+    onConnect,
+    onAccept,
+    onRemoveConnection,
+    onMessage,
+}) => (
+    <div className="flex items-center gap-3 w-full md:w-auto justify-center md:justify-end flex-wrap mt-4">
+        {isBlockedByMe ? (
+            <button
+                onClick={onBlock}
+                className="px-6 py-2.5 bg-red-500 text-white rounded-2xl font-bold hover:bg-red-600 transition shadow-lg flex items-center gap-2"
+            >
+                <ShieldAlert size={18} /> Unblock
+            </button>
+        ) : isBlockedByTarget ? (
+            null
+        ) : isMyProfile ? (
+            <button
+                onClick={onEdit}
+                className="px-6 py-2.5 bg-main hover:bg-surface text-content rounded-2xl font-bold transition border border-adaptive flex items-center gap-2 shadow-sm"
+            >
+                <Settings size={18} /> <span className="hidden sm:inline">Edit Profile</span>
+            </button>
+        ) : (
+            <>
+                {/* Follow Button */}
+                <button
+                    onClick={onFollow}
+                    className={`px-8 py-2.5 rounded-2xl font-bold transition shadow-lg active:scale-95 ${followStatus === "following"
+                        ? "bg-main border border-adaptive text-content hover:border-red-500/30 hover:text-red-500"
+                        : followStatus === "requested"
+                            ? "bg-surface text-muted border border-adaptive"
+                            : "bg-primary text-white hover:opacity-90"
+                        }`}
+                >
+                    {followStatus === "following"
+                        ? "Unfollow"
+                        : followStatus === "requested"
+                            ? "Requested"
+                            : "Follow"}
+                </button>
+
+                {/* Connection & Message Buttons */}
+                {(!profileUser.isPrivate || followStatus === "following" || connectionStatus !== "none") && (
+                    <>
+                        {connectionStatus === "connected" ? (
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={onMessage}
+                                    className="p-3 bg-main border border-adaptive text-primary rounded-2xl hover:bg-primary/5 transition"
+                                >
+                                    <MessageCircle size={20} />
+                                </button>
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setShowConnectionMenu(!showConnectionMenu)}
+                                        className="px-4 py-3 bg-green-500/10 text-green-600 border border-green-500/20 rounded-2xl font-bold hover:bg-green-500/20 transition flex items-center gap-2"
+                                    >
+                                        <UserCheck size={20} /> <span className="hidden sm:inline">Connected</span>
+                                        <ChevronDown size={16} />
+                                    </button>
+                                    {showConnectionMenu && (
+                                        <>
+                                            <div className="fixed inset-0 z-10" onClick={() => setShowConnectionMenu(false)}></div>
+                                            <div className="absolute right-0 top-14 bg-surface border border-adaptive rounded-xl shadow-xl z-20 w-48 overflow-hidden animate-in fade-in zoom-in-95">
+                                                <button
+                                                    onClick={() => {
+                                                        onRemoveConnection();
+                                                        setShowConnectionMenu(false);
+                                                    }}
+                                                    className="w-full text-left px-4 py-3 text-sm text-red-500 hover:bg-red-500/10 flex items-center gap-2 transition"
+                                                >
+                                                    <UserX size={18} /> Remove Connection
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        ) : connectionStatus === "sent" ? (
+                            <button disabled className="px-6 py-2.5 bg-surface text-muted border border-adaptive rounded-2xl font-bold cursor-default flex items-center gap-2">
+                                <Clock size={20} /> Request Sent
+                            </button>
+                        ) : connectionStatus === "received" ? (
+                            <button
+                                onClick={onAccept}
+                                className="px-6 py-2.5 bg-green-600 text-white rounded-2xl font-bold hover:bg-green-700 transition shadow-md flex items-center gap-2"
+                            >
+                                <UserCheck size={20} /> Accept Request
+                            </button>
+                        ) : (
+                            <button
+                                onClick={onConnect}
+                                className="p-3 bg-main text-content border border-adaptive hover:text-primary rounded-2xl transition"
+                            >
+                                <UserPlus size={20} />
+                            </button>
+                        )}
+                    </>
+                )}
+                <button
+                    onClick={onBlock}
+                    className="p-3 bg-main border-adaptive text-muted hover:text-red-500 hover:bg-red-500/5 rounded-2xl border transition"
+                >
+                    <ShieldAlert size={20} />
+                </button>
+            </>
+        )}
+    </div>
+));
+
+const ProfileStats = React.memo(({ postsCount, profileUser, isContentLocked, navigate }) => (
+    <div className="flex justify-center md:justify-start gap-8 md:gap-12 mt-8 pt-6 border-t border-adaptive/50">
+        <div className="text-center group">
+            <span className="block text-2xl font-black text-content">{isContentLocked ? "-" : postsCount}</span>
+            <span className="text-xs text-muted font-bold uppercase tracking-wider">Posts</span>
+        </div>
+        <div
+            onClick={() => !isContentLocked && navigate(`/profile/${profileUser._id}/followers`)}
+            className={`text-center group ${isContentLocked ? "cursor-default" : "cursor-pointer"}`}
+        >
+            <span className="block text-2xl font-black text-content group-hover:text-primary transition-colors">
+                {isContentLocked ? "-" : profileUser.followers?.length || 0}
+            </span>
+            <span className="text-xs text-muted font-bold uppercase tracking-wider">Followers</span>
+        </div>
+        <div
+            onClick={() => !isContentLocked && navigate(`/profile/${profileUser._id}/following`)}
+            className={`text-center group ${isContentLocked ? "cursor-default" : "cursor-pointer"}`}
+        >
+            <span className="block text-2xl font-black text-content group-hover:text-primary transition-colors">
+                {isContentLocked ? "-" : profileUser.following?.length || 0}
+            </span>
+            <span className="text-xs text-muted font-bold uppercase tracking-wider">Following</span>
+        </div>
+    </div>
+));
+
+const PrivateAccountState = () => (
+    <div className="max-w-5xl mx-auto mt-16 px-4 text-center pb-20">
+        <div className="bg-surface/50 border border-adaptive rounded-3xl p-12 flex flex-col items-center justify-center shadow-sm max-w-lg mx-auto">
+            <div className="w-24 h-24 bg-main rounded-full flex items-center justify-center mb-6 border-2 border-adaptive">
+                <Lock size={40} className="text-content opacity-70" />
+            </div>
+            <h3 className="text-2xl font-bold text-content mb-3">This Account is Private</h3>
+            <p className="text-muted font-medium">Follow this account to see their photos and videos.</p>
+        </div>
+    </div>
+);
+
+const TabNavigation = React.memo(({ activeTab, setActiveTab, isMyProfile }) => (
+    <div className="flex justify-center border-b border-adaptive mb-8 sticky top-[60px] bg-main/95 backdrop-blur-xl z-30 pt-2 transition-colors duration-300">
+        {TABS.map((tab) => {
+            if (tab.private && !isMyProfile) return null;
+            return (
+                <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-6 md:px-10 pb-3 text-sm font-bold tracking-wide transition-all relative ${activeTab === tab.id ? "text-primary" : "text-muted hover:text-content"
+                        }`}
+                >
+                    <span className="flex items-center gap-2">
+                        <tab.icon size={18} /> {tab.label}
+                    </span>
+                    {activeTab === tab.id && (
+                        <motion.div
+                            layoutId="activeTab"
+                            className="absolute bottom-0 left-0 w-full h-0.5 bg-primary shadow-[0_0_10px_var(--color-primary)]"
+                        />
+                    )}
+                </button>
+            );
+        })}
+    </div>
+));
+
+const PostsGrid = React.memo(({ posts }) => (
+    <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        className="space-y-6 flex flex-col items-center"
+    >
+        {posts.length > 0 ? (
+            posts.map((post) => <PostCard key={post._id} post={post} />)
+        ) : (
+            <EmptyState icon={Grid} message="No posts yet" />
+        )}
+    </motion.div>
+));
+
+const MediaGrid = React.memo(({ posts, onImageClick }) => {
+    const images = useMemo(() =>
+        posts.filter((p) => p.image_urls?.length > 0).flatMap((p) => p.image_urls),
+        [posts]);
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="grid grid-cols-3 gap-0.5 md:gap-4"
+        >
+            {images.length > 0 ? (
+                images.map((url, i) => (
+                    <div
+                        key={`${url}-${i}`}
+                        onClick={() => onImageClick(url)}
+                        className="aspect-square bg-surface overflow-hidden group cursor-pointer relative"
+                    >
+                        <img
+                            src={url}
+                            alt="media"
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <Maximize2 className="text-white transform scale-75 group-hover:scale-100 transition-transform" />
+                        </div>
+                    </div>
+                ))
+            ) : (
+                <div className="col-span-3">
+                    <EmptyState icon={Image} message="No photos shared" />
+                </div>
+            )}
+        </motion.div>
+    );
+});
+
+const SavedGrid = React.memo(({ posts, loading }) => (
+    <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        className="space-y-6 flex flex-col items-center"
+    >
+        {loading ? (
+            <div className="py-12 flex flex-col items-center text-muted">
+                <Loader2 className="w-10 h-10 animate-spin mb-3 text-primary" />
+                <p className="font-medium">Loading saved posts...</p>
+            </div>
+        ) : posts.length > 0 ? (
+            posts.map((post) => <PostCard key={post._id} post={post} />)
+        ) : (
+            <EmptyState
+                icon={Bookmark}
+                message="No saved posts"
+                subtext="Save posts to watch them later."
+            />
+        )}
+    </motion.div>
+));
+
+const EmptyState = ({ icon: Icon, message, subtext }) => (
+    <div className="py-20 text-center text-muted w-full">
+        <div className="w-20 h-20 bg-surface rounded-full flex items-center justify-center mx-auto mb-4 border border-adaptive">
+            <Icon size={40} className="text-muted" />
+        </div>
+        <p className="font-medium text-lg">{message}</p>
+        {subtext && <p className="text-sm mt-2 opacity-70">{subtext}</p>}
+    </div>
+);
+
+const ImageModal = ({ selectedImage, onClose }) => (
+    <AnimatePresence>
+        {selectedImage && (
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4"
+                onClick={onClose}
+            >
+                <button
+                    onClick={onClose}
+                    className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition z-50 backdrop-blur-md"
+                >
+                    <X size={24} />
+                </button>
+                <motion.img
+                    initial={{ scale: 0.8 }}
+                    animate={{ scale: 1 }}
+                    exit={{ scale: 0.8 }}
+                    src={selectedImage}
+                    alt="Full Screen"
+                    className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+                    onClick={(e) => e.stopPropagation()}
+                />
+            </motion.div>
+        )}
+    </AnimatePresence>
+);
 
 export default Profile;

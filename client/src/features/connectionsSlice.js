@@ -1,24 +1,32 @@
+/**
+ * @file connectionsSlice.js
+ * @description Redux slice for managing user social graph including connections, 
+ * followers, following, and block lists. Utilizes optimistic updates for smooth UX.
+ * @module State/Connections
+ */
+
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import axiosInstance from "../api/axios";
+import axiosInstance from "../lib/axios";
 import toast from "react-hot-toast";
 
-// 1. التلاجة (Initial State) 🧊
-const initialState = {
-    connections: [],        // قايمة الأصدقاء الفعليين
-    pendingRequests: [],    // الطلبات اللي جيالي (عشان أقبل أو أرفض)
-    sentRequests: [],       // الطلبات اللي أنا بعتها (عشان أعمل Cancel لو حبيت)
-    followers: [],          // الناس اللي متابعاني
-    following: [],          // الناس اللي أنا متابعهم
+// --- Initial State ---
 
-    status: "idle",         // حالة التحميل العامة
+const initialState = {
+    connections: [],
+    pendingRequests: [],
+    sentRequests: [],
+    followers: [],
+    following: [],
+    blockedUsers: [],
+    isLoading: false,
     error: null,
 };
 
-// =========================================================
-// 2. المندوبين (Thunks) 🛵
-// =========================================================
+// --- Thunks (Async Actions) ---
 
-// أ) مندوب جلب الأصدقاء والطلبات (Get My Network)
+/**
+ * Fetches all connection-related data for the current user.
+ */
 export const fetchMyConnections = createAsyncThunk(
     "connection/fetchMyConnections",
     async (token, { rejectWithValue }) => {
@@ -26,7 +34,7 @@ export const fetchMyConnections = createAsyncThunk(
             const response = await axiosInstance.get("/connection", {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            // بنرجع الداتا كلها (اصدقاء + طلبات)
+            // Accessing nested data property as per backend response structure
             return response.data.data;
         } catch (error) {
             return rejectWithValue(error.response?.data?.message || "Failed to load connections");
@@ -34,116 +42,199 @@ export const fetchMyConnections = createAsyncThunk(
     }
 );
 
-// ب) مندوب إرسال طلب صداقة (Send Request)
+/**
+ * Sends a connection request to a target user.
+ * Uses toast.promise for real-time feedback.
+ */
 export const sendConnectionRequest = createAsyncThunk(
     "connection/sendRequest",
     async ({ targetUserId, token }, { rejectWithValue }) => {
+        const promise = axiosInstance.post(`/connection/send`,
+            { receiverId: targetUserId },
+            { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        toast.promise(promise, {
+            loading: 'Sending request...',
+            success: 'Request sent!',
+            error: (err) => err.response?.data?.message || 'Failed to send request',
+        });
+
         try {
-            const response = await axiosInstance.post(`/connection/request/${targetUserId}`, {}, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            toast.success("Connection request sent!");
-            return targetUserId; // بنرجع الـ ID عشان نحدث الواجهة
+            const response = await promise;
+            return { targetUserId, data: response.data };
         } catch (error) {
-            toast.error(error.response?.data?.message || "Failed to send request");
             return rejectWithValue(error.response?.data?.message);
         }
     }
 );
 
-// ج) مندوب قبول الصداقة (Accept Request)
+/**
+ * Accepts an incoming connection request.
+ */
 export const acceptConnectionRequest = createAsyncThunk(
     "connection/acceptRequest",
-    async ({ requestId, token }, { rejectWithValue }) => {
+    async ({ targetUserId, token }, { rejectWithValue }) => {
         try {
-            const response = await axiosInstance.post(`/connection/accept/${requestId}`, {}, {
+            const response = axiosInstance.post(`/connection/accept/${targetUserId}`, {}, {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            toast.success("You are now connected!");
-            return requestId; // بنرجع رقم الطلب عشان نشيله من قايمة الانتظار
+
+            toast.promise(response, {
+                loading: 'Accepting...',
+                success: 'You are now connected! 🎉',
+                error: 'Failed to accept request',
+            });
+
+            await response;
+            return targetUserId;
         } catch (error) {
-            toast.error("Failed to accept request");
             return rejectWithValue(error.response?.data?.message);
         }
     }
 );
 
-// د) مندوب البلوك (Block User)
+/**
+ * Blocks a specific user and cleans up existing relationships.
+ */
 export const blockUser = createAsyncThunk(
     "connection/blockUser",
     async ({ targetUserId, token }, { rejectWithValue }) => {
         try {
-            await axiosInstance.post(`/connection/block/${targetUserId}`, {}, {
-                headers: { Authorization: `Bearer ${token}` },
+            const response = axiosInstance.post(`/connection/block`,
+                { blockId: targetUserId },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            toast.promise(response, {
+                loading: 'Blocking user...',
+                success: 'User blocked.',
+                error: 'Failed to block user',
             });
-            toast.success("User blocked.");
+
+            await response;
             return targetUserId;
         } catch (error) {
-            toast.error("Failed to block user");
             return rejectWithValue(error.response?.data?.message);
         }
     }
 );
 
-// =========================================================
-// 3. الشيف (Slice) 👨‍🍳
-// =========================================================
+/**
+ * Follows a user (handles both public and private accounts).
+ */
+export const followUserAction = createAsyncThunk(
+    "connection/followUser",
+    async ({ targetUserId, token }, { rejectWithValue }) => {
+        try {
+            const response = await axiosInstance.post(`/user/follow/${targetUserId}`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            return { targetUserId, status: response.data.status };
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to follow");
+            return rejectWithValue(error.response?.data?.message);
+        }
+    }
+);
+
+/**
+ * Unfollows a user.
+ */
+export const unfollowUserAction = createAsyncThunk(
+    "connection/unfollowUser",
+    async ({ targetUserId, token }, { rejectWithValue }) => {
+        try {
+            await axiosInstance.post(`/user/unfollow/${targetUserId}`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            return targetUserId;
+        } catch (error) {
+            toast.error("Failed to unfollow");
+            return rejectWithValue(error.response?.data?.message);
+        }
+    }
+);
+
+// --- Slice Definition ---
 
 const connectionSlice = createSlice({
     name: "connection",
     initialState,
     reducers: {
-        // لو حبيت تفضي القوائم يدوياً (مثلاً عند الـ Logout)
+        /**
+         * Resets the entire connection state (useful on logout).
+         */
         clearConnections: (state) => {
-            state.connections = [];
-            state.pendingRequests = [];
+            Object.assign(state, initialState);
         }
     },
     extraReducers: (builder) => {
         builder
-            // --- Fetch Connections (لما نفتح صفحة Network) ---
+            // --- Fetch Connections ---
             .addCase(fetchMyConnections.pending, (state) => {
-                state.status = "loading";
+                state.isLoading = true;
+                state.error = null;
             })
             .addCase(fetchMyConnections.fulfilled, (state, action) => {
-                state.status = "succeeded";
-                // بنفترض إن الباك إند بيرجع { connections: [], requests: [] }
-                // لو الباك إند بيرجعهم مفصولين، نظبط دول
+                state.isLoading = false;
                 state.connections = action.payload.connections || [];
-                state.pendingRequests = action.payload.requests || [];
+                state.pendingRequests = action.payload.pendingRequests || [];
+                state.sentRequests = action.payload.sentRequests || [];
                 state.followers = action.payload.followers || [];
                 state.following = action.payload.following || [];
+                state.blockedUsers = action.payload.blockedUsers || [];
             })
             .addCase(fetchMyConnections.rejected, (state, action) => {
-                state.status = "failed";
+                state.isLoading = false;
                 state.error = action.payload;
             })
 
-            // --- Send Request (لما ابعت طلب) ---
+            // --- Send Request ---
             .addCase(sendConnectionRequest.fulfilled, (state, action) => {
-                // (Optimistic UI) ممكن نضيفه لقائمة sentRequests لو عايزين نعرضها
-                state.sentRequests.push(action.payload);
+                state.sentRequests.push({ _id: action.payload.targetUserId });
             })
 
-            // --- Accept Request (لما أقبل طلب) ---
+            // --- Accept Request (Optimistic State Update) ---
             .addCase(acceptConnectionRequest.fulfilled, (state, action) => {
-                // 1. شيل الطلب من قايمة الانتظار
-                const requestId = action.payload;
-                state.pendingRequests = state.pendingRequests.filter(req => req._id !== requestId);
+                const targetId = action.payload;
+                const requestIndex = state.pendingRequests.findIndex(u => u._id === targetId);
 
-                // 2. (اختياري) ممكن نضيفه لقايمة connections فوراً لو معانا بيانات اليوزر كاملة
-                // بس الأسهل نعمل refetch للكونكشنز
+                if (requestIndex !== -1) {
+                    const user = state.pendingRequests[requestIndex];
+                    state.pendingRequests.splice(requestIndex, 1);
+                    state.connections.push(user);
+                }
             })
 
-            // --- Block User (لما أعمل بلوك) ---
+            // --- Block User (Comprehensive Cleanup) ---
             .addCase(blockUser.fulfilled, (state, action) => {
-                const blockedId = action.payload;
-                // شيله من أصدقائي فوراً (عشان يختفي من قدامي)
-                state.connections = state.connections.filter(c => c._id !== blockedId);
-                state.following = state.following.filter(f => f._id !== blockedId);
-                state.followers = state.followers.filter(f => f._id !== blockedId);
-                // وكمان من الطلبات لو كان جالي طلب منه
-                state.pendingRequests = state.pendingRequests.filter(req => req._id !== blockedId);
+                const targetId = action.payload;
+
+                // Remove from all relationship arrays
+                const filterFn = (u) => u._id !== targetId;
+                state.connections = state.connections.filter(filterFn);
+                state.pendingRequests = state.pendingRequests.filter(filterFn);
+                state.sentRequests = state.sentRequests.filter(filterFn);
+                state.followers = state.followers.filter(filterFn);
+                state.following = state.following.filter(filterFn);
+
+                // Add to block list
+                state.blockedUsers.push({ _id: targetId });
+            })
+
+            // --- Follow User ---
+            .addCase(followUserAction.fulfilled, (state, action) => {
+                const { targetUserId, status } = action.payload;
+                if (status === "following") {
+                    state.following.push({ _id: targetUserId });
+                }
+            })
+
+            // --- Unfollow User ---
+            .addCase(unfollowUserAction.fulfilled, (state, action) => {
+                const targetId = action.payload;
+                state.following = state.following.filter(u => u._id !== targetId);
             });
     },
 });

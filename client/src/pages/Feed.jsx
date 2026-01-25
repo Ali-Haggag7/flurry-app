@@ -1,118 +1,179 @@
-import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
-import { useAuth } from "@clerk/clerk-react"
-import toast from "react-hot-toast"
-import { Bell } from "lucide-react"
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { useOutletContext } from "react-router-dom";
+import { useAuth } from "@clerk/clerk-react";
+import toast from "react-hot-toast";
+import { Feather } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
-// Components & Assets
-import Loading from "../components/Loading"
-import StoriesBar from "../components/StoriesBar"
-import RecentMessages from "../components/ResentMessages" // تأكد إن الاسم صح (Recent مش Resent)
-import PostCard from "../components/PostCard"
-import logo from "../assets/logo.png"
-import api from "../api/axios" // تأكد من المسار حسب ملفاتك
+// --- Components ---
+import StoriesBar from "../components/story/StoriesBar";
+import PostCard from "../components/feed/PostCard";
+import PostSkeleton from "../components/skeletons/PostSkeleton";
+import RecentMessages from "../components/chat/ResentMessages";
+import Footer from "../components/common/Footer";
 
+// --- Libs/Utils ---
+import api from "../lib/axios";
+
+/**
+ * EmptyFeedState Component
+ * Displays when the feed has no posts.
+ */
+const EmptyFeedState = ({ feedType }) => (
+    <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="flex flex-col items-center justify-center py-20 text-center bg-surface rounded-3xl border border-adaptive border-dashed shadow-sm mt-8"
+    >
+        <div className="p-4 bg-main rounded-full mb-4">
+            <Feather size={32} className="text-primary opacity-50" />
+        </div>
+        <h3 className="text-lg font-bold text-content">No posts yet</h3>
+        <p className="text-muted text-sm mt-1">
+            {feedType === 'following'
+                ? "Follow more people to see their posts here!"
+                : "Be the first to share something!"}
+        </p>
+    </motion.div>
+);
+
+/**
+ * Feed Component
+ * ------------------------------------------------------------------
+ * Main feed container. Handles data fetching, layout, and LCP prioritization.
+ */
 const Feed = () => {
-    const [feeds, setFeeds] = useState([])
-    const [loading, setLoading] = useState(false)
+    // --- State & Context ---
+    const { feedType } = useOutletContext();
+    const { getToken } = useAuth();
 
-    const navigate = useNavigate()
-    const { getToken } = useAuth()
+    const [feeds, setFeeds] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const fetchFeeds = async () => {
+    // --- Handlers ---
+
+    /**
+     * Fetches posts based on active tab.
+     * Uses AbortController to cancel stale requests on tab switch.
+     */
+    const fetchFeeds = useCallback(async (signal) => {
         try {
-            setLoading(true)
-            const token = await getToken()
+            setLoading(true);
+            setFeeds([]);
+
+            const token = await getToken();
 
             const { data } = await api.get("/post/feed", {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            })
+                headers: { Authorization: `Bearer ${token}` },
+                params: {
+                    type: feedType === "following" ? "following" : "for-you",
+                    page: 1,
+                    limit: 10
+                },
+                signal
+            });
 
-            if (data.success) {
-                setFeeds(data.posts)
+            if (!signal.aborted && data.success) {
+                setFeeds(data.posts);
+                setLoading(false); 
             }
+
         } catch (error) {
-            console.log(error)
-            toast.error(error.response?.data?.message || "Failed to load feed")
-        } finally {
-            setLoading(false)
+            if (error.name !== 'CanceledError') {
+                console.error("Feed Error:", error);
+                toast.error("Failed to load feed");
+                setLoading(false); 
+            }
         }
-    }
+    }, [feedType, getToken]);
+
+    /**
+     * Optimistic UI: Removes deleted post immediately.
+     */
+    const handleDeletePostFromFeed = useCallback((postId) => {
+        setFeeds(prev => prev.filter(p => p._id !== postId));
+    }, []);
+
+    // --- Effects ---
 
     useEffect(() => {
-        fetchFeeds()
-    }, [])
+        // Create controller to cancel previous requests if feedType changes quickly
+        const controller = new AbortController();
 
-    return !loading ? (
-        // 1. الإطار الخارجي: واخد الشاشة كلها وممنوع السكرول فيه نهائي (عشان الخط البنفسجي يختفي)
-        <div className="h-screen w-screen overflow-hidden bg-linear-to-br from-[#0b0f3b] via-[#1a1f4d] to-[#3c1f7f] text-white relative">
+        setLoading(true);
+        fetchFeeds(controller.signal);
 
-            {/*---------- Header Bar ----------*/}
-            {/* الهيدر ثابت فوق ومحمي بطبقة z-index عالية */}
-            <div className="absolute top-0 left-0 w-full z-50 flex justify-center pt-2 pb-2 backdrop-blur-md bg-[#0b0f3b]/30">
-                <div className="w-[95%] md:w-[90%] max-w-7xl flex justify-between items-center p-2 rounded-3xl">
-                    <img src={logo} alt="logo" className="h-10 mr-3 hidden sm:block animate-pulse" />
+        return () => {
+            controller.abort();
+        };
+    }, [fetchFeeds]);
 
-                    <div className="flex-1 mx-4 max-w-md">
-                        <input
-                            type="text"
-                            placeholder="Search here..."
-                            className="w-full bg-white/5 border rounded-3xl border-purple-500/30 text-white p-3 placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500/40 transition-all duration-200"
-                        />
-                    </div>
+    // --- Memoized Helpers ---
+    const skeletonLoader = useMemo(() => [1, 2, 3].map((n) => <PostSkeleton key={n} />), []);
 
-                    <div onClick={() => navigate('/notifications')} className="relative cursor-pointer p-3 rounded-full bg-linear-to-br from-purple-600 to-pink-500 shadow-[0_0_20px_rgba(255,0,255,0.5)] hover:scale-110 transition-transform duration-200">
-                        <Bell className="w-6 h-6 text-white animate-pulse" />
-                        <span className="absolute top-0 right-0 bg-red-500 w-3.5 h-3.5 rounded-full" />
-                    </div>
-                </div>
-            </div>
+    return (
+        <div className="w-full min-h-screen relative pt-[60px] bg-main">
+            <div className="w-full px-2 sm:px-4 py-2">
+                <div className="w-full max-w-[1350px] mx-auto flex justify-center gap-6 lg:gap-8">
 
-
-            {/*---------- Scrollable Content Area ----------*/}
-            {/* 2. منطقة المحتوى: دي بس اللي بتعمل سكرول راسي، ومقفولة افقياً */}
-            <div className="h-full w-full overflow-y-auto overflow-x-hidden pt-24 pb-10 custom-scrollbar">
-
-                {/* 3. الوعاء المرن: بيوسط العناصر وبيظبط المسافات */}
-                {/* 👇 التعديل هنا: زودنا gap-28 عشان نبعد الرسائل يمين خالص */}
-                <div className="w-full max-w-[1450px] mx-auto flex justify-center items-start gap-6 xl:gap-28 px-4">
-
-                    {/* Left Side: Stories & Posts */}
-                    {/* خد flex-1 عشان ياخد المساحة المتاحة بس ميزيدش عن حده */}
+                    {/* --- Middle Feed Section --- */}
                     <div className="w-full max-w-2xl flex-1 space-y-6">
+
+                        {/* Stories Bar (Horizontal Scroll) */}
                         <StoriesBar />
 
-                        <div className="space-y-6 pb-10">
-                            {feeds.length > 0 ? (
-                                feeds.map((post) => (
-                                    <div key={post._id}>
-                                        <PostCard post={post} />
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="text-center py-10 text-gray-400">No posts yet</div>
+                        <div className="space-y-5 min-h-[500px]">
+
+                            {loading && (
+                                <div className="space-y-5">
+                                    {skeletonLoader}
+                                </div>
+                            )}
+
+                            {!loading && feeds.length > 0 && (
+                                <AnimatePresence mode="popLayout" initial={false}>
+                                    {feeds.map((post, index) => (
+                                        <motion.div
+                                            key={post._id}
+                                            layout
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+                                            transition={{ duration: 0.4, delay: index === 0 ? 0 : 0.1 }}
+                                        >
+                                            <PostCard
+                                                post={post}
+                                                // Critical for LCP: Prioritize images for first 3 posts
+                                                priority={index < 3}
+                                                onDelete={handleDeletePostFromFeed}
+                                            />
+                                        </motion.div>
+                                    ))}
+                                </AnimatePresence>
+                            )}
+
+                            {!loading && feeds.length === 0 && (
+                                <EmptyFeedState feedType={feedType} />
                             )}
                         </div>
                     </div>
 
-                    {/* Right Side: Messages */}
-                    {/* ثابتة في مكانها لما تعمل سكرول */}
-                    <div className="hidden xl:block w-80 shrink-0 sticky top-4 left-[calc(100%-400px)]">
-                        <RecentMessages />
+                    {/* --- Right Sidebar Section (Desktop Only) --- */}
+                    <div className="hidden xl:block w-[320px] shrink-0">
+                        <div className="sticky top-20 h-[calc(100vh-100px)] flex flex-col gap-4">
+                            <div className="flex-1 min-h-0 bg-surface rounded-xl border border-adaptive shadow-sm overflow-hidden">
+                                <RecentMessages />
+                            </div>
+                            <div className="shrink-0 pb-2">
+                                <Footer />
+                            </div>
+                        </div>
                     </div>
 
                 </div>
             </div>
-
-            {/* Aesthetic Overlay (خلفية جمالية) */}
-            <div className="pointer-events-none fixed inset-0 bg-linear-to-br from-purple-600/20 via-pink-500/10 to-indigo-400/10 mix-blend-overlay animate-pulse-slow"></div>
-
         </div>
-    ) : (
-        <Loading />
-    )
-}
+    );
+};
 
-export default Feed
+export default Feed;

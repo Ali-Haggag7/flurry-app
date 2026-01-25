@@ -1,63 +1,83 @@
-import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";  // thunk: ده "المندوب" اللي بياخد الموتوسيكل ويروح للسيرفر يجيب الداتا ويرجع. 
-import axiosInstance from "../api/axios"; // السنترال اللي عملناه
+/**
+ * @file userSlice.js
+ * @description Redux slice for managing the authenticated user's profile, settings, 
+ * privacy, and session state. 
+ * @module State/User
+ */
 
-// 1. الحالة الافتراضية لالتلاجة المبدئية
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import toast from "react-hot-toast";
+
+// --- Local Imports ---
+import axiosInstance from "../lib/axios";
+
+// --- Initial State ---
 const initialState = {
-    currentUser: null, // لسه مفيش زباين (يوزر)
-    status: "idle",  // المندوب قاعد مبيعملش حاجة (idle)
-    error: null,  // مفيش مشاكل لحد دلوقتي
+    currentUser: null,
+    status: "idle", // 'idle' | 'loading' | 'succeeded' | 'failed'
+    error: null,
 };
 
 // =========================================================
-// 2. المندوبين (Thunks) - العمليات اللي بتكلم السيرفر
+// 2. Thunks (Async Logic)
 // =========================================================
 
-// أ) مندوب المزامنة (بيكلم /api/user/sync)
+/**
+ * Synchronizes local user data with the server profile.
+ */
 export const syncUser = createAsyncThunk(
     "user/syncUser",
     async ({ userData, token }, { rejectWithValue }) => {
         try {
-            // بنبعت الداتا والتوكن في الهيدر
             const response = await axiosInstance.post("/user/sync", userData, {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            return response.data.user; // دي الداتا اللي هتروح للمخزن
+            return response.data.user;
         } catch (error) {
-            console.log(error);
+            console.error("User Sync Error:", error);
             return rejectWithValue(error.response?.data?.message || "Sync failed");
         }
     }
 );
 
-// ب) مندوب جلب البيانات (بيكلم /api/user/me)
+/**
+ * Fetches the current authenticated user's full profile data.
+ */
 export const fetchUser = createAsyncThunk(
-    "user/fetchUser",  // اسم المشوار (عشان المدير يعرف هو فين)
+    "user/fetchUser",
     async (token, { rejectWithValue }) => {
         try {
-            // 1. المندوب ركب الموتوسيكل وراح السيرفر
             const response = await axiosInstance.get("/user/me", {
-                headers: { Authorization: `Bearer ${token}` },  // مهم عشان السيرفر يعرف اليوزر مين
+                headers: { Authorization: `Bearer ${token}` },
             });
-            // 2. رجع بالبضاعة (البيانات)
-            return response.data; // (ممكن تكون data.user حسب رد الباك إند)
+            return response.data.data;
         } catch (error) {
-            // 3. الموتوسيكل عطل أو السيرفر قفل (رجع بمشكلة)
             return rejectWithValue(error.response?.data?.message || "Fetch failed");
         }
     }
 );
 
-// ج) مندوب التعديل (بيكلم /api/user/update-profile)
+/**
+ * Updates the user's profile information (handles multipart/form-data for avatars).
+ */
 export const updateUser = createAsyncThunk(
     "user/updateUser",
     async ({ formData, token }, { rejectWithValue }) => {
+        const promise = axiosInstance.put("/user/update-profile", formData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "multipart/form-data"
+            },
+        });
+
+        toast.promise(promise, {
+            loading: 'Updating profile...',
+            success: 'Profile updated successfully!',
+            error: (err) => err.response?.data?.message || 'Update failed',
+        });
+
         try {
-            const response = await axiosInstance.put("/user/update-profile", formData, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "multipart/form-data" // مهم عشان الصور
-                },
-            });
+            const response = await promise;
             return response.data.data;
         } catch (error) {
             return rejectWithValue(error.response?.data?.message);
@@ -65,52 +85,104 @@ export const updateUser = createAsyncThunk(
     }
 );
 
+/**
+ * Updates user privacy settings (e.g., online status visibility).
+ */
+export const updatePrivacy = createAsyncThunk(
+    "user/updatePrivacy",
+    async ({ settings, token }, { rejectWithValue }) => {
+        const promise = axiosInstance.put("/user/update-privacy", settings, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+
+        toast.promise(promise, {
+            loading: 'Saving privacy settings...',
+            success: 'Privacy updated!',
+            error: 'Failed to update privacy',
+        });
+
+        try {
+            const response = await promise;
+            return response.data.user;
+        } catch (error) {
+            return rejectWithValue(error.response?.data?.message || "Update failed");
+        }
+    }
+);
+
+/**
+ * Updates user notification preferences.
+ */
+export const updateNotificationSettings = createAsyncThunk(
+    "user/updateNotificationSettings",
+    async ({ settings, token }, { rejectWithValue }) => {
+        const promise = axiosInstance.put("/user/update-settings", settings, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+
+        toast.promise(promise, {
+            loading: 'Updating preferences...',
+            success: 'Notification settings saved!',
+            error: 'Failed to save settings',
+        });
+
+        try {
+            const response = await promise;
+            return response.data.settings;
+        } catch (error) {
+            return rejectWithValue(error.response?.data?.message || "Update failed");
+        }
+    }
+);
+
 // =========================================================
-// 3. قسم اليوزر (Slice) - أمين المخزن
+// 3. User Slice
 // =========================================================
 
-// ده بقى "قلب" المطعم. ده المكان اللي بنعرف فيه الشيف هيتصرف إزاي مع كل حاجة بتحصل
 const userSlice = createSlice({
-    name: "user",  // اسم القسم (قسم اللحوم مثلاً)
-    initialState,  // شكل التلاجة وهي فاضية
+    name: "user",
+    initialState,
     reducers: {
-        // (reducers العادية): دي الأوامر المباشرة اللي مش محتاجة خروج بره المطعم
+        /**
+         * Local optimistic toggle for muting/unmuting users.
+         */
+        toggleMuteLocal: (state, action) => {
+            const targetId = action.payload;
+            if (state.currentUser) {
+                if (!state.currentUser.mutedUsers) {
+                    state.currentUser.mutedUsers = [];
+                }
+                const index = state.currentUser.mutedUsers.indexOf(targetId);
+                if (index !== -1) {
+                    state.currentUser.mutedUsers.splice(index, 1);
+                } else {
+                    state.currentUser.mutedUsers.push(targetId);
+                }
+            }
+        },
+        /**
+         * Resets user state to default.
+         */
         logout: (state) => {
-            state.currentUser = null;  // الشيف رمى الداتا في الزبالة (نضف التلاجة)
-            state.status = "idle";  // المندوب قاعد مبيعملش حاجة (idle)
-            state.error = null;  // مفيش مشاكل
+            state.currentUser = null;
+            state.status = "idle";
+            state.error = null;
         },
     },
-    // (extraReducers): دي التعليمات الخاصة بالمندوبين (Thunks)
-    // الشيف بيقول: "لما المندوب فلان يرجع، أعمل إيه؟"
     extraReducers: (builder) => {
         builder
-            // ----------------------------------------------------
-            // الحالة الأولى: المندوب لسه خارج (Pending)
-            // ----------------------------------------------------
-            .addCase(syncUser.pending, (state) => {
-                state.status = "loading";  // علق يافطة "جاري التحميل"
-            })
-            // ----------------------------------------------------
-            // الحالة الثانية: المندوب رجع بالسلامة ومعاه البضاعة (Fulfilled)
-            // ----------------------------------------------------
+            // --- Sync & Fetch (Common Lifecycle) ---
+            .addCase(syncUser.pending, (state) => { state.status = "loading"; })
             .addCase(syncUser.fulfilled, (state, action) => {
-                state.status = "succeeded";  // شيل اليافطة، العملية نجحت
-                // (action.payload) دي الشنطة اللي المندوب راجع بيها
-                state.currentUser = action.payload; // حط البضاعة جوه التلاجة
+                state.status = "succeeded";
+                state.currentUser = action.payload;
             })
-            // ----------------------------------------------------
-            // الحالة الثالثة: المندوب رجع يعيط (Rejected)
-            // ----------------------------------------------------
             .addCase(syncUser.rejected, (state, action) => {
-                state.status = "failed";  // شيل اليافطة، العملية فشلت
-                state.error = action.payload;  // سجل سبب الفشل في الدفتر
+                state.status = "failed";
+                state.error = action.payload;
             })
 
-            // --- حالة Fetch User ---
-            .addCase(fetchUser.pending, (state) => {
-                state.status = "loading";
-            })
+            .addCase(fetchUser.pending, (state) => { state.status = "loading"; })
             .addCase(fetchUser.fulfilled, (state, action) => {
                 state.status = "succeeded";
                 state.currentUser = action.payload;
@@ -120,16 +192,30 @@ const userSlice = createSlice({
                 state.error = action.payload;
             })
 
-            // --- حالة Update User ---
-            .addCase(updateUser.pending, (state) => {
-                state.status = "loading";
-            })
+            // --- Update Operations ---
+            .addCase(updateUser.pending, (state) => { state.status = "loading"; })
             .addCase(updateUser.fulfilled, (state, action) => {
                 state.status = "succeeded";
-                state.currentUser = action.payload; // البيانات الجديدة
+                state.currentUser = action.payload;
+            })
+
+            .addCase(updatePrivacy.fulfilled, (state, action) => {
+                if (state.currentUser) {
+                    state.currentUser = { ...state.currentUser, ...action.payload };
+                }
+            })
+
+            .addCase(updateNotificationSettings.fulfilled, (state, action) => {
+                if (state.currentUser) {
+                    const currentSettings = state.currentUser.notificationSettings || {};
+                    state.currentUser.notificationSettings = {
+                        ...currentSettings,
+                        ...action.payload
+                    };
+                }
             });
     },
 });
 
-export const { logout } = userSlice.actions;
+export const { logout, toggleMuteLocal } = userSlice.actions;
 export default userSlice.reducer;
