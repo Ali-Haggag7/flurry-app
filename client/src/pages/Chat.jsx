@@ -468,7 +468,6 @@ const Chat = () => {
 
                 {/* --- Chat Area --- */}
                 <div className="flex-1 overflow-y-auto px-4 pt-24 pb-4 space-y-6 scrollbar-hide bg-main relative">
-                    <div className="absolute inset-0 bg-[url('/chat-pattern.png')] bg-repeat opacity-[0.03] pointer-events-none" />
 
                     {messages.map((msg, index) => (
                         <div key={msg._id || index} ref={(el) => (messageRefs.current[msg._id] = el)}>
