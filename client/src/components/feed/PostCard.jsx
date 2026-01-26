@@ -374,7 +374,27 @@ const PostCard = ({ post, onDelete, priority, onReport }) => {
             </div>
 
             {/* Modals */}
-            <ShareModal isOpen={showInternalShareModal} onClose={() => setShowInternalShareModal(false)} post={post} onSuccess={() => setSharesCount(p => p + 1)} />
+            <ShareModal
+                isOpen={showInternalShareModal}
+                onClose={() => setShowInternalShareModal(false)}
+                post={post}
+                onSuccess={async () => {
+                    // 1. تحديث الـ UI لحظياً
+                    setSharesCount(p => p + 1);
+
+                    // 2. تحديث الداتابيز (ده اللي كان ناقص)
+                    try {
+                        const token = await getToken();
+                        await api.put(`/post/share/${post._id}`, {}, {
+                            headers: { Authorization: `Bearer ${token}` }
+                        });
+                    } catch (error) {
+                        console.error("Failed to update share count", error);
+                        // لو فشل ممكن ترجع تنقص العدد تاني لو حابب الدقة أوي
+                        setSharesCount(p => p - 1);
+                    }
+                }}
+            />
             <EditPostModal isOpen={showEditModal} onClose={() => setShowEditModal(false)} post={post} onUpdateSuccess={(newContent) => setDisplayContent(newContent)} />
             <AnimatePresence>
                 {showReportModal && <ReportModal postId={post._id} onClose={() => setShowReportModal(false)} />}
