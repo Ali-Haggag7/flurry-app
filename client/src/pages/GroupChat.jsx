@@ -6,7 +6,7 @@
  * Optimized for performance using memoized callbacks and components.
  */
 
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useAuth } from "@clerk/clerk-react";
@@ -261,13 +261,18 @@ const GroupChat = () => {
     // --- UI Effects ---
 
     // Auto Scroll on new messages
-    useEffect(() => {
-        if (messages.length > 0 && messagesEndRef.current) {
-            const behavior = isFirstLoad.current ? "auto" : "smooth";
-            messagesEndRef.current.scrollIntoView({ behavior, block: "end" });
-            isFirstLoad.current = false;
+    useLayoutEffect(() => {
+        if (messagesEndRef.current && messages.length > 0) {
+            if (isFirstLoad.current) {
+                setTimeout(() => {
+                    messagesEndRef.current.scrollIntoView({ behavior: "auto", block: "end" });
+                    isFirstLoad.current = false;
+                }, 100);
+            } else {
+                messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+            }
         }
-    }, [messages, imagePreview, audioUrl, replyTo]);
+    }, [messages]);
 
     // Audio Preview Animation
     useEffect(() => {

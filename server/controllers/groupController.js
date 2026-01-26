@@ -273,22 +273,30 @@ export const respondToJoinRequest = expressAsyncHandler(async (req, res) => {
     const currentUser = await User.findOne({ clerkId: userId });
     const group = await Group.findById(groupId);
 
-    if (!group) { res.status(404); throw new Error("Group not found"); }
+    if (!group) {
+        res.status(404);
+        throw new Error("Group not found");
+    }
+
+    // Authorization Check: Only owner can respond
     if (group.owner.toString() !== currentUser._id.toString()) {
         res.status(403);
         throw new Error("Not authorized");
     }
 
+    // Find the pending member request
+    // IMPORTANT: This prevents processing the same request twice (idempotency)
     const memberIndex = group.members.findIndex(
         m => m.user.toString() === memberId && m.status === "pending"
     );
 
     if (memberIndex === -1) {
         res.status(404);
-        throw new Error("Request not found");
+        throw new Error("Request not found or already processed");
     }
 
     if (action === "accept") {
+        // Update member status
         group.members[memberIndex].status = "accepted";
         group.members[memberIndex].joinedAt = Date.now();
 
@@ -303,6 +311,7 @@ export const respondToJoinRequest = expressAsyncHandler(async (req, res) => {
             });
         }
     } else {
+        // Reject: Remove member from the list
         group.members.splice(memberIndex, 1);
     }
 

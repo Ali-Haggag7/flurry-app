@@ -33,19 +33,32 @@ import Loading from "../components/common/Loading";
 /**
  * @component RequestCard
  * @description Memoized individual request card to prevent list re-renders.
+ * Updated to handle processing state per action to prevent double-clicks.
  */
 const RequestCard = memo(({ request, onResponse }) => {
     const { user } = request;
-    const [isProcessing, setIsProcessing] = useState(false);
+    // Track which specific action is being processed ('accept' | 'reject' | null)
+    const [processingAction, setProcessingAction] = useState(null);
 
-    // Local handler to manage button loading state independently
-    const handleAction = async (action) => {
-        setIsProcessing(true);
+    const handleAction = async (e, action) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Prevent double submission if an action is already in progress
+        if (processingAction) return;
+
+        setProcessingAction(action);
+
         await onResponse(user._id, action);
-        setIsProcessing(false);
+
+        // We generally don't need to reset state here because the component 
+        // will likely be unmounted/removed from the list by the parent.
     };
 
     if (!user) return null;
+
+    // Check if any action is currently in progress to disable both buttons
+    const isAnyProcessing = processingAction !== null;
 
     return (
         <motion.div
@@ -81,20 +94,28 @@ const RequestCard = memo(({ request, onResponse }) => {
             {/* Actions Buttons */}
             <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
                 <button
-                    onClick={() => handleAction("reject")}
-                    disabled={isProcessing}
-                    className="px-4 py-2.5 rounded-xl bg-main text-muted hover:bg-red-500/10 hover:text-red-500 border border-adaptive hover:border-red-500/30 transition-all flex items-center gap-2 font-medium shadow-sm disabled:opacity-50"
+                    onClick={(e) => handleAction(e, "reject")}
+                    disabled={isAnyProcessing}
+                    className="px-4 py-2.5 rounded-xl bg-main text-muted hover:bg-red-500/10 hover:text-red-500 border border-adaptive hover:border-red-500/30 transition-all flex items-center gap-2 font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <X size={18} />}
+                    {processingAction === "reject" ? (
+                        <Loader2 size={18} className="animate-spin" />
+                    ) : (
+                        <X size={18} />
+                    )}
                     <span className="hidden sm:inline">Decline</span>
                 </button>
 
                 <button
-                    onClick={() => handleAction("accept")}
-                    disabled={isProcessing}
-                    className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center gap-2 font-bold disabled:opacity-50"
+                    onClick={(e) => handleAction(e, "accept")}
+                    disabled={isAnyProcessing}
+                    className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center gap-2 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
+                    {processingAction === "accept" ? (
+                        <Loader2 size={18} className="animate-spin" />
+                    ) : (
+                        <Check size={18} />
+                    )}
                     <span>Accept</span>
                 </button>
             </div>
@@ -178,7 +199,7 @@ const GroupRequests = () => {
 
             toast.success(action === "accept" ? "New member welcomed! 🎉" : "Request declined.");
 
-            // Optimistic update
+            // Optimistic update - Remove from list immediately
             setRequests((prev) => prev.filter((req) => req.user?._id !== memberId));
 
         } catch (error) {

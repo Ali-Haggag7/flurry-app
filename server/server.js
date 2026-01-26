@@ -39,9 +39,16 @@ app.use(helmet());
 
 // CORS: Cross-Origin Resource Sharing
 app.use(cors({
-    origin: process.env.CLIENT_URL ? [process.env.CLIENT_URL, "http://localhost:5173", "http://localhost:4173", "https://flurry-kkz2j0vdg-ali-haggags-projects.vercel.app"] : "*",
+    origin: [
+        "http://localhost:5173", // Local Frontend
+        "http://localhost:4173", // Local Preview
+        "https://flurry-app.vercel.app", // 🚨 الدومين الأساسي (مهم جداً)
+        "https://flurry-fobctrqrq-ali-haggags-projects.vercel.app", // الدومين الفرعي اللي كان ضارب
+        process.env.CLIENT_URL // لو حاطط قيمة في ملف .env
+    ].filter(Boolean), // عشان يمسح أي قيمة فاضية لو الـ env مش موجود
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 // Rate Limiting: Prevent DDoS/Spam (1000 req / 15 min)
