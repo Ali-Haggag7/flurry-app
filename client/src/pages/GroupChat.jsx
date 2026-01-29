@@ -119,7 +119,7 @@ const GroupChat = () => {
                     if (newReactions[existingIndex].emoji === emoji) {
                         newReactions.splice(existingIndex, 1);
                     } else {
-                        newReactions[existingIndex].emoji = emoji;
+                        newReactions[existingIndex] = { ...newReactions[existingIndex], emoji: emoji };
                     }
                 } else {
                     newReactions.push({ user: userObj, emoji });

@@ -64,6 +64,7 @@ const Chat = () => {
     const [showChatInfo, setShowChatInfo] = useState(false);
     const [typing, setTyping] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
+    const [activeMobileActionId, setActiveMobileActionId] = useState(null);
 
     // --- Audio State ---
     const [recordingDuration, setRecordingDuration] = useState(0);
@@ -81,6 +82,7 @@ const Chat = () => {
     const audioPreviewRef = useRef(null);
     const isFirstLoad = useRef(true);
     const typingTimeoutRef = useRef(null);
+    const prevMessagesLength = useRef(0);
 
     // ========================================================
     // 🧠 Handlers (Memoized)
@@ -137,7 +139,7 @@ const Chat = () => {
                     if (newReactions[existingIndex].emoji === emoji) {
                         newReactions.splice(existingIndex, 1);
                     } else {
-                        newReactions[existingIndex].emoji = emoji;
+                        newReactions[existingIndex] = { ...newReactions[existingIndex], emoji: emoji };
                     }
                 } else {
                     newReactions.push({ user: userObj, emoji });
@@ -257,12 +259,24 @@ const Chat = () => {
 
     // Scroll Logic
     useEffect(() => {
-        if (messages.length > 0 && messagesEndRef.current) {
-            const behavior = isFirstLoad.current ? "auto" : "smooth";
-            messagesEndRef.current.scrollIntoView({ behavior, block: "end" });
+        // 1. لو الصفحة لسه بتحمل لأول مرة -> انزل تحت خالص
+        if (isFirstLoad.current && messages.length > 0) {
+            messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
             isFirstLoad.current = false;
+            prevMessagesLength.current = messages.length;
+            return;
         }
-    }, [messages, imagePreview, audioUrl, replyTo]);
+
+        // 2. السحر هنا: هل عدد الرسايل زاد؟ (يعني رسالة جديدة جات)
+        if (messages.length > prevMessagesLength.current) {
+            // يبقى انزل تحت
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        }
+        // لو العدد ثابت (زي حالة الرياكشن) -> الكود مش هيدخل هنا وهيفضل ثابت مكانه 😎
+
+        // 3. تحديث العداد للمرة الجاية
+        prevMessagesLength.current = messages.length;
+    }, [messages, imagePreview, audioUrl, replyTo, isTyping, messagesEndRef]);
 
     // Audio Animation Frame
     useEffect(() => {
@@ -336,7 +350,7 @@ const Chat = () => {
         // 🛡️ خط الدفاع الأول: لو مفيش نص أو النوع مش سترينج، اخلع فوراً
         if (!text || typeof text !== "string") return null;
         console.log(text);
-        
+
         // كمل شغلك عادي وأنت مطمن
         const match = text.match(/post\/([a-fA-F0-9]{24})/);
         return match ? match[1] : null;
@@ -492,7 +506,22 @@ const Chat = () => {
                 </div>
 
                 {/* --- Chat Area --- */}
-                <div className="flex-1 overflow-y-auto px-4 pt-24 pb-4 space-y-6 scrollbar-hide bg-main relative">
+                <div
+                    className="flex-1 overflow-y-auto px-4 pt-24 pb-4 space-y-6 scrollbar-hide bg-main relative">
+
+                    {activeMobileActionId && (
+                        <div
+                            className="fixed inset-0 z-40"
+                            onTouchStart={(e) => {
+                                e.stopPropagation();
+                                setActiveMobileActionId(null);
+                            }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMobileActionId(null);
+                            }}
+                        />
+                    )}
 
                     {messages.map((msg, index) => (
                         <div key={msg._id || index} ref={(el) => (messageRefs.current[msg._id] = el)}>

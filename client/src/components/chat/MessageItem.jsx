@@ -6,8 +6,8 @@
  * when the reaction menu is toggled.
  */
 
-import { memo, useState, useRef } from "react";
-import { Reply, Smile, Clock, Check, CheckCheck, Play, Pause } from "lucide-react";
+import { memo, useState } from "react";
+import { Reply, Smile, Clock, Check, CheckCheck, Play, Pause, MoreHorizontal } from "lucide-react";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "framer-motion";
 import VoiceMessage from "../chat/VoiceMessage";
@@ -30,22 +30,6 @@ const MessageItem = ({
 }) => {
 
     const [showMobileActions, setShowMobileActions] = useState(false);
-    const touchTimerRef = useRef(null);
-
-    // Mobile Touch Handlers
-    const handleTouchStart = () => {
-        touchTimerRef.current = setTimeout(() => {
-            setShowMobileActions(true);
-            if (navigator.vibrate) navigator.vibrate(50);
-        }, 500);
-    };
-
-    // Clear timer on touch end
-    const handleTouchEnd = () => {
-        if (touchTimerRef.current) {
-            clearTimeout(touchTimerRef.current);
-        }
-    };
 
     // 1. Handle System Messages
     if (msg.message_type === "system") {
@@ -83,7 +67,8 @@ const MessageItem = ({
             className={`flex items-end gap-2 transition-colors duration-500 p-2 rounded-xl relative z-10 
             ${isMe ? "flex-row-reverse" : "flex-row"} 
             ${isSending ? "opacity-70" : "opacity-100"} 
-            ${isHighlighted ? "bg-primary/10" : ""}`}
+            ${isHighlighted ? "bg-primary/10" : ""}
+            mb-4 md:mb-0`}
         >
             {/* Avatar */}
             {!isMe && (
@@ -101,39 +86,21 @@ const MessageItem = ({
                 <div className="relative group w-full">
 
                     {/* 👇 Action Buttons (Reply & React) */}
-                    {showMobileActions && (
-                        <div
-                            className="fixed inset-0 z-30"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowMobileActions(false);
-                            }}
-                        ></div>
-                    )}
-                    <div
-                        className={`absolute top-2 ${isMe ? "-left-16" : "-right-16"} 
-    flex items-center gap-1 z-20 transition-all duration-200
-    ${showMobileActions ? "opacity-100 translate-x-0" : "opacity-0 group-hover:opacity-100"} 
-    `}
-                    >
-
-                        {/* (Reply Button) */}
+                    <div className={`absolute top-2 ${isMe ? "-left-16" : "-right-16"} md:opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1 z-20`}>
+                        {/* Reply Button */}
                         <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setReplyTo(msg);
-                                setShowMobileActions(false);
-                            }}
-                            className="relative z-40 p-1.5 text-muted hover:text-primary bg-surface/80 hover:bg-surface rounded-full transition backdrop-blur-sm shadow-sm"
+                            onClick={() => setReplyTo(msg)}
+                            className="p-1.5 text-muted hover:text-primary bg-surface/80 hover:bg-surface rounded-full transition backdrop-blur-sm shadow-sm"
                         >
                             <Reply size={14} />
                         </button>
 
-                        {/*(Reaction Button) */}
-                        <div className="relative z-40">
+                        {/* Reaction Trigger Button */}
+                        <div className="relative">
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
+                                    // Toggle logic handled by parent via callback
                                     setActiveReactionId(msg._id);
                                 }}
                                 className={`p-1.5 rounded-full transition backdrop-blur-sm shadow-sm ${showReactionMenu ? "text-yellow-500 bg-surface" : "text-muted hover:text-yellow-500 bg-surface/80 hover:bg-surface"}`}
@@ -141,24 +108,25 @@ const MessageItem = ({
                                 <Smile size={14} />
                             </button>
 
-                            {/* 👇 Reaction Menu */}
+                            {/* 👇 Reaction Menu Popup (Optimized Animation) */}
                             <AnimatePresence>
-                                {(showReactionMenu || (activeReactionId === msg._id)) && (
+                                {showReactionMenu && (
                                     <motion.div
                                         initial={{ scale: 0.8, opacity: 0, y: 10 }}
                                         animate={{ scale: 1, opacity: 1, y: 0 }}
                                         exit={{ scale: 0.8, opacity: 0, y: 10 }}
-                                        transition={{ duration: 0.15, ease: "easeOut" }}
+                                        transition={{ duration: 0.15, ease: "easeOut" }} // Super fast
                                         className={`absolute -top-12 ${isMe ? "right-0" : "left-0"} bg-surface border border-adaptive rounded-full shadow-xl p-1 flex items-center gap-1 z-50`}
-                                        onClick={(e) => e.stopPropagation()}
+                                        onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
                                     >
                                         {REACTIONS.map((emoji) => (
                                             <button
                                                 key={emoji}
                                                 onClick={(e) => {
-                                                    e.stopPropagation(); // ⛔️
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+
                                                     handleReaction(msg._id, emoji);
-                                                    setShowMobileActions(false);
                                                 }}
                                                 className="w-7 h-7 flex items-center justify-center text-lg hover:scale-125 transition-transform cursor-pointer hover:bg-main rounded-full active:scale-95"
                                             >
@@ -172,14 +140,9 @@ const MessageItem = ({
                     </div>
 
                     {/* 👇 Message Bubble */}
-                    <motion.div
-                        whileTap={{ scale: 0.98, opacity: 0.8 }}
-                        onTouchStart={handleTouchStart}
-                        onTouchEnd={handleTouchEnd}
-                        onTouchMove={handleTouchEnd}
-                        className={`p-2.5 shadow-sm text-sm leading-relaxed wrap-break-word w-full flex flex-col gap-1 border transition-colors 
+                    <div className={`p-2.5 shadow-sm text-sm leading-relaxed wrap-break-word w-full flex flex-col gap-1 border transition-colors 
                         ${isMe ? "bg-primary text-white rounded-2xl rounded-br-none border-primary shadow-primary/20"
-                                : "bg-surface text-content rounded-2xl rounded-bl-none border-adaptive"}`}>
+                            : "bg-surface text-content rounded-2xl rounded-bl-none border-adaptive"}`}>
 
                         {/* Reply Preview inside Bubble */}
                         {msg.replyTo && (
@@ -261,18 +224,25 @@ const MessageItem = ({
                                 </div>
                             )}
                         </div>
-                    </motion.div>
+                    </div>
 
                     {/* Existing Reactions Bar */}
                     {msg.reactions && msg.reactions.length > 0 && (
                         <div
                             onClick={(e) => { e.stopPropagation(); setViewReactionMessage(msg); }}
-                            className={`absolute -bottom-3 ${isMe ? "left-2" : "right-2"} flex items-center gap-0.5 bg-surface border border-adaptive rounded-full px-1.5 py-0.5 shadow-sm text-[10px] cursor-pointer hover:scale-105 transition z-10`}
+                            className={`absolute -bottom-3 ${isMe ? "left-2" : "right-2"} flex items-center gap-0.5 bg-surface border border-adaptive rounded-full px-1.5 py-0.5 shadow-sm text-[10px] cursor-pointer hover:scale-105 transition z-10 select-none`}
                         >
                             {[...new Set(msg.reactions.map(r => r.emoji))].slice(0, 3).map((e, i) => (
-                                <span key={i}>{e}</span>
+                                <span key={i} className="animate-in fade-in zoom-in duration-200">
+                                    {e}
+                                </span>
                             ))}
-                            {msg.reactions.length > 1 && <span className="text-muted font-bold ml-0.5">{msg.reactions.length}</span>}
+
+                            {msg.reactions.length > 1 && (
+                                <span className="text-muted font-bold ml-0.5 text-[9px]">
+                                    {msg.reactions.length}
+                                </span>
+                            )}
                         </div>
                     )}
                 </div>
