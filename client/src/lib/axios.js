@@ -1,15 +1,12 @@
 /**
  * @file axiosInstance.ts
- * Smart Configuration:
- * - Development: Uses localhost
- * - Production/Preview: Uses relative path "/api" to talk to its own backend
+ * Configured to use VITE_API_URL dynamically.
  */
 
 import axios from "axios";
 
-const BASE_URL = import.meta.env.MODE === "development"
-    ? "http://localhost:4000/api"
-    : "/api";
+// Priority: Production Env -> Local Fallback
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 
 const axiosInstance = axios.create({
     baseURL: BASE_URL,
