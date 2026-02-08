@@ -57,7 +57,12 @@ app.use(helmet({
 
 // CORS Configuration: Controls access to resources from different domains
 app.use(cors({
-    origin: true, // Dynamically allows requests from any origin (Useful for Vercel Preview URLs)
+    origin: [
+        "http://localhost:5173", // Local Frontend
+        "http://localhost:4173", // Local Preview
+        "https://flurry-app.vercel.app", // Production
+        /\.vercel\.app$/ // Regex to allow Vercel preview deployments
+    ],
     credentials: true, // Allows cookies and authorization headers
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"]
