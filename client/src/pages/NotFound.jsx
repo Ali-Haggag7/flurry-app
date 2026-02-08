@@ -2,18 +2,16 @@ import { memo, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Home, ArrowLeft, SearchX } from "lucide-react";
+import { useTranslation } from "react-i18next"; // 🟢
 
 /**
  * NotFound Component
  * Displays a 404 error page with animated elements and navigation options.
- * * Optimizations:
- * - `memo`: Prevents unnecessary re-renders (though rare for a route component).
- * - `useCallback`: Memoizes the navigation handler.
- * - Theme System: strictly uses `bg-main`, `text-content`, `border-adaptive` variables.
  */
 const NotFound = () => {
     // --- Hooks ---
     const navigate = useNavigate();
+    const { t } = useTranslation(); // 🟢
 
     // --- Handlers ---
     const handleGoBack = useCallback(() => {
@@ -25,8 +23,8 @@ const NotFound = () => {
 
             {/* --- Ambient Background --- */}
             <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] opacity-30"></div>
-                <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px] opacity-30"></div>
+                <div className="absolute top-[-20%] start-[-10%] w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] opacity-30"></div>
+                <div className="absolute bottom-[-20%] end-[-10%] w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px] opacity-30"></div>
                 {/* Noise overlay */}
                 <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 mix-blend-overlay"></div>
             </div>
@@ -51,7 +49,7 @@ const NotFound = () => {
                         initial={{ y: 10, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         transition={{ delay: 0.3 }}
-                        className="absolute -bottom-4 -right-4 bg-surface border border-adaptive px-4 py-1 rounded-full shadow-lg"
+                        className="absolute -bottom-4 -end-4 bg-surface border border-adaptive px-4 py-1 rounded-full shadow-lg" // 🔵 -end-4
                     >
                         <span className="font-mono text-xl font-bold text-primary tracking-widest">404</span>
                     </motion.div>
@@ -64,7 +62,7 @@ const NotFound = () => {
                     transition={{ delay: 0.2, duration: 0.5 }}
                     className="text-4xl md:text-5xl font-black mb-4 tracking-tight text-content"
                 >
-                    Page Not Found
+                    {t("notFound.title")} {/* 🟢 */}
                 </motion.h1>
 
                 <motion.p
@@ -73,7 +71,7 @@ const NotFound = () => {
                     transition={{ delay: 0.4, duration: 0.5 }}
                     className="text-muted text-lg max-w-md mb-10 leading-relaxed"
                 >
-                    Oops! The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.
+                    {t("notFound.desc")} {/* 🟢 */}
                 </motion.p>
 
                 {/* 3. Action Buttons */}
@@ -87,10 +85,10 @@ const NotFound = () => {
                     <button
                         onClick={handleGoBack}
                         aria-label="Go back"
-                        className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-surface hover:bg-surface/80 border border-adaptive transition-all font-bold text-muted hover:text-content active:scale-95 shadow-sm"
+                        className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-surface hover:bg-surface/80 border border-adaptive transition-all font-bold text-muted hover:text-content active:scale-95 shadow-sm group"
                     >
-                        <ArrowLeft size={20} />
-                        Go Back
+                        <ArrowLeft size={20} className="rtl:rotate-180 transition-transform group-hover:-translate-x-1 rtl:group-hover:translate-x-1" /> {/* 🔵 RTL Flip & Animation fix */}
+                        {t("notFound.goBack")} {/* 🟢 */}
                     </button>
 
                     {/* Home Button */}
@@ -99,7 +97,7 @@ const NotFound = () => {
                         className="flex items-center justify-center gap-2 px-8 py-3 rounded-xl bg-primary hover:opacity-90 shadow-lg shadow-primary/25 transition-all font-bold text-white active:scale-95"
                     >
                         <Home size={20} />
-                        Home Page
+                        {t("notFound.home")} {/* 🟢 */}
                     </Link>
                 </motion.div>
 

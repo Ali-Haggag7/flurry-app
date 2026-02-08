@@ -15,6 +15,11 @@ import {
     getGroupMessages,
     markGroupMessagesRead,
     reactToGroupMessage,
+    toggleGroupLock,
+    deleteGroupMessage,
+    editGroupMessage,
+    createPoll,
+    votePoll
 } from '../controllers/groupController.js';
 
 const groupRouter = express.Router();
@@ -52,6 +57,18 @@ groupRouter.get('/discovery', protect, getDiscoveryGroups);
 groupRouter.post('/send', protect, upload.single('file'), sendGroupMessage);
 
 /**
+ * @route POST /api/group/poll
+ * @desc Create a new Poll message
+ */
+groupRouter.post("/poll", protect, createPoll);
+
+/**
+ * @route PUT /api/group/poll/vote
+ * @desc Vote on a Poll
+ */
+groupRouter.put("/poll/vote", protect, votePoll);
+
+/**
  * @route GET /api/group/messages/:groupId
  * @desc Fetch chat history
  */
@@ -69,6 +86,18 @@ groupRouter.put("/read/:groupId", protect, markGroupMessagesRead);
  */
 groupRouter.post("/react", protect, reactToGroupMessage);
 
+/**
+ * @route DELETE /api/group/message/:id
+ * @desc Delete a message
+ */
+groupRouter.delete("/message/:id", protect, deleteGroupMessage);
+
+/**
+ * @route PUT /api/group/message/:id
+ * @desc Edit a message
+ */
+groupRouter.put("/message/:id", protect, editGroupMessage);
+
 // =========================================================
 // 3. Membership Actions (Join/Leave)
 // =========================================================
@@ -83,6 +112,7 @@ groupRouter.put('/leave/:groupId', protect, leaveGroup);
 groupRouter.put('/kick', protect, removeMember);
 groupRouter.get('/requests/:groupId', protect, getGroupRequests);
 groupRouter.put('/request/respond', protect, respondToJoinRequest);
+groupRouter.put('/toggle-lock/:groupId', protect, toggleGroupLock);
 
 // =========================================================
 // 5. General Details (Dynamic Route)

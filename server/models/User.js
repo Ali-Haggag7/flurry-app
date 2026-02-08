@@ -136,7 +136,17 @@ const userSchema = new mongoose.Schema({
     lastSeen: {
         type: Date,
         default: Date.now
-    }
+    },
+
+    // (Notifications)
+    fcmTokens: {
+        type: [String], // Array of FCM tokens
+        default: [],
+    },
+    isPushEnabled: {
+        type: Boolean,
+        default: true
+    },
 
 }, {
     timestamps: true,

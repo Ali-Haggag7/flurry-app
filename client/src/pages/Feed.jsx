@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import { Feather } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next"; // 🟢
 
 // --- Components ---
 import StoriesBar from "../components/story/StoriesBar";
@@ -19,7 +20,7 @@ import api from "../lib/axios";
  * EmptyFeedState Component
  * Displays when the feed has no posts.
  */
-const EmptyFeedState = ({ feedType }) => (
+const EmptyFeedState = ({ feedType, t }) => ( // 🟢 Receive t
     <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -28,11 +29,11 @@ const EmptyFeedState = ({ feedType }) => (
         <div className="p-4 bg-main rounded-full mb-4">
             <Feather size={32} className="text-primary opacity-50" />
         </div>
-        <h3 className="text-lg font-bold text-content">No posts yet</h3>
+        <h3 className="text-lg font-bold text-content">{t("feed.emptyTitle")}</h3> {/* 🟢 */}
         <p className="text-muted text-sm mt-1">
             {feedType === 'following'
-                ? "Follow more people to see their posts here!"
-                : "Be the first to share something!"}
+                ? t("feed.emptyFollowing") // 🟢
+                : t("feed.emptyForYou")} {/* 🟢 */}
         </p>
     </motion.div>
 );
@@ -46,6 +47,7 @@ const Feed = () => {
     // --- State & Context ---
     const { feedType } = useOutletContext();
     const { getToken } = useAuth();
+    const { t } = useTranslation(); // 🟢
 
     const [feeds, setFeeds] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -75,17 +77,17 @@ const Feed = () => {
 
             if (!signal.aborted && data.success) {
                 setFeeds(data.posts);
-                setLoading(false); 
+                setLoading(false);
             }
 
         } catch (error) {
             if (error.name !== 'CanceledError') {
                 console.error("Feed Error:", error);
-                toast.error("Failed to load feed");
-                setLoading(false); 
+                toast.error(t("feed.loadError")); // 🟢
+                setLoading(false);
             }
         }
-    }, [feedType, getToken]);
+    }, [feedType, getToken, t]);
 
     /**
      * Optimistic UI: Removes deleted post immediately.
@@ -153,7 +155,7 @@ const Feed = () => {
                             )}
 
                             {!loading && feeds.length === 0 && (
-                                <EmptyFeedState feedType={feedType} />
+                                <EmptyFeedState feedType={feedType} t={t} /> // 🟢 Pass t
                             )}
                         </div>
                     </div>

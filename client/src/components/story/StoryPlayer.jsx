@@ -12,6 +12,8 @@ import { useAuth, useUser } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import { AnimatePresence, motion } from "framer-motion";
 import { formatDistanceToNowStrict } from "date-fns";
+import { useTranslation } from "react-i18next"; // 🟢 Import translation hook
+import { ar, enUS } from "date-fns/locale"; // 🟢 Import locales
 
 // Icons
 import {
@@ -82,7 +84,7 @@ const StoryMedia = memo(({ activeStory, isVideo, isMuted, videoRef, onVideoEnd, 
 });
 
 // 2. Viewers Modal - Separated for cleaner code
-const ViewersListModal = memo(({ show, onClose, viewers, currentUser }) => {
+const ViewersListModal = memo(({ show, onClose, viewers, currentUser, t, currentLocale }) => { // 🟢 Receive t & locale
     if (!show) return null;
 
     // Filter Logic
@@ -104,7 +106,7 @@ const ViewersListModal = memo(({ show, onClose, viewers, currentUser }) => {
                 <div className="p-4 border-b border-white/5 flex items-center justify-between bg-[#1a1a1a]">
                     <h3 className="text-white font-bold text-lg flex items-center gap-2">
                         <Eye size={20} className="text-blue-500" />
-                        Story Views ({viewers?.length || 0})
+                        {t("stories.player.storyViews")} ({viewers?.length || 0}) {/* 🟢 */}
                     </h3>
                     <button onClick={onClose} className="p-2 bg-white/5 rounded-full hover:bg-white/10 text-white transition">
                         <X size={18} />
@@ -116,7 +118,7 @@ const ViewersListModal = memo(({ show, onClose, viewers, currentUser }) => {
                     {filteredViewers.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full text-white/30 gap-2">
                             <Eye size={40} />
-                            <p>No views yet</p>
+                            <p>{t("stories.player.noViews")}</p> {/* 🟢 */}
                         </div>
                     ) : (
                         filteredViewers.map((viewRecord) => {
@@ -128,18 +130,18 @@ const ViewersListModal = memo(({ show, onClose, viewers, currentUser }) => {
                                         <div className="relative">
                                             <img src={viewerData?.profile_picture || "/avatar-placeholder.png"} className="w-10 h-10 rounded-full object-cover border border-white/10" alt="v" />
                                             {viewRecord.reaction && (
-                                                <span className="absolute -bottom-1 -right-1 text-sm bg-[#1a1a1a] rounded-full p-0.5 border border-white/10">
+                                                <span className="absolute -bottom-1 -end-1 text-sm bg-[#1a1a1a] rounded-full p-0.5 border border-white/10">
                                                     {viewRecord.reaction}
                                                 </span>
                                             )}
                                         </div>
                                         <div>
-                                            <p className="text-white font-medium text-sm flex items-center gap-2">{viewerData?.full_name}</p>
-                                            <p className="text-white/40 text-xs">@{viewerData?.username}</p>
+                                            <p className="text-white font-medium text-sm flex items-center gap-2 text-start">{viewerData?.full_name}</p> {/* 🔵 text-start */}
+                                            <p className="text-white/40 text-xs text-start">@{viewerData?.username}</p> {/* 🔵 text-start */}
                                         </div>
                                     </div>
                                     <span className="text-white/30 text-xs font-medium">
-                                        {formatDistanceToNowStrict(new Date(viewRecord.viewedAt), { addSuffix: true })}
+                                        {formatDistanceToNowStrict(new Date(viewRecord.viewedAt), { addSuffix: true, locale: currentLocale })} {/* 🟢 Localized time */}
                                     </span>
                                 </div>
                             );
@@ -173,12 +175,14 @@ const StoryPlayer = ({ viewStory, setViewStory, onClose }) => {
     const { getToken } = useAuth();
     const { user } = useUser();
     const navigate = useNavigate();
+    const { t, i18n } = useTranslation(); // 🟢 Hook initialization
 
     // --- Derived Values ---
     const activeStory = viewStory?.stories[currentIndex];
     const isVideo = activeStory?.type === 'video' || (activeStory?.type === 'media' && activeStory?.mediaUrl?.endsWith(".mp4"));
     const isMyStory = user?.username === viewStory.user.username || user?.fullName === viewStory.user.full_name;
     const fileUrl = activeStory?.image || activeStory?.mediaUrl;
+    const currentLocale = i18n.language === 'ar' ? ar : enUS; // 🟢 Select locale
 
     // --- 1. Mark as Viewed Logic ---
     useEffect(() => {
@@ -271,13 +275,13 @@ const StoryPlayer = ({ viewStory, setViewStory, onClose }) => {
     const handleDeleteStory = async (e) => {
         e.stopPropagation();
         setIsPaused(true);
-        if (!window.confirm("Delete this story?")) { setIsPaused(false); return; }
+        if (!window.confirm(t("stories.player.deleteConfirm"))) { setIsPaused(false); return; } // 🟢
         try {
             const token = await getToken();
             await api.delete(`/story/${activeStory._id}`, { headers: { Authorization: `Bearer ${token}` } });
-            toast.success("Deleted");
+            toast.success(t("stories.player.deletedSuccess")); // 🟢
             handleClose();
-        } catch { toast.error("Failed"); setIsPaused(false); }
+        } catch { toast.error(t("stories.player.deleteError")); setIsPaused(false); } // 🟢
     };
 
     const handleReaction = async (emoji) => {
@@ -311,13 +315,13 @@ const StoryPlayer = ({ viewStory, setViewStory, onClose }) => {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            toast.success("Reply sent! 🚀");
+            toast.success(t("stories.player.replySuccess")); // 🟢
             setReplyText("");
             if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
             setIsPaused(false);
         } catch (error) {
             console.error("Failed to send reply", error);
-            toast.error("Failed to send reply");
+            toast.error(t("stories.player.replyError")); // 🟢
             setIsPaused(true);
         } finally {
             setIsSendingReply(false);
@@ -336,7 +340,7 @@ const StoryPlayer = ({ viewStory, setViewStory, onClose }) => {
                 onTouchEnd={() => togglePause(false)}
             >
                 {/* --- 1. Progress Bars --- */}
-                <div className="absolute top-3 left-0 w-full z-50 px-2 flex gap-1 pt-1 md:pt-0 pointer-events-none">
+                <div className="absolute top-3 start-0 w-full z-50 px-2 flex gap-1 pt-1 md:pt-0 pointer-events-none">
                     {viewStory.stories.map((_, idx) => {
                         if (idx < currentIndex) {
                             return <div key={idx} className="h-[3px] flex-1 bg-white/30 rounded-full overflow-hidden backdrop-blur-sm"><div className="h-full w-full bg-white rounded-full" /></div>;
@@ -349,15 +353,17 @@ const StoryPlayer = ({ viewStory, setViewStory, onClose }) => {
                 </div>
 
                 {/* --- 2. Header --- */}
-                <div className="absolute top-6 left-3 flex items-center justify-between z-40 w-[calc(100%-24px)] pointer-events-none">
-                    <div className="flex items-center gap-2 pointer-events-auto bg-black/20 backdrop-blur-md p-1 pr-3 rounded-full cursor-pointer hover:bg-black/40 transition" onClick={(e) => { e.stopPropagation(); handleClose(); navigate(`/profile/${viewStory.user._id}`) }}>
+                <div className="absolute top-6 start-3 flex items-center justify-between z-40 w-[calc(100%-24px)] pointer-events-none">
+                    <div className="flex items-center gap-2 pointer-events-auto bg-black/20 backdrop-blur-md p-1 pe-3 rounded-full cursor-pointer hover:bg-black/40 transition" onClick={(e) => { e.stopPropagation(); handleClose(); navigate(`/profile/${viewStory.user._id}`) }}>
                         <img src={viewStory.user?.profile_picture || "/avatar-placeholder.png"} className="w-8 h-8 rounded-full border border-white/20" alt="User" />
                         <div>
                             <p className="text-white text-xs font-bold flex items-center gap-1">
                                 {viewStory.user?.full_name}
                                 {viewStory.user?.isVerified && <BadgeCheck size={14} className="text-primary" />}
                             </p>
-                            <p className="text-white/60 text-[10px]">{new Date(activeStory.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            <p className="text-white/60 text-[10px]">
+                                {formatDistanceToNowStrict(new Date(activeStory.createdAt), { addSuffix: true, locale: currentLocale })} {/* 🟢 Time Ago */}
+                            </p>
                         </div>
                     </div>
                     <div className="flex gap-2 pointer-events-auto">
@@ -394,7 +400,7 @@ const StoryPlayer = ({ viewStory, setViewStory, onClose }) => {
 
                 {/* --- 4. Caption --- */}
                 {(activeStory.caption || (activeStory.type !== "text" && activeStory.content)) && (
-                    <div className="absolute bottom-24 left-0 w-full px-4 z-40 text-center pointer-events-none">
+                    <div className="absolute bottom-24 start-0 w-full px-4 z-40 text-center pointer-events-none">
                         <div className="inline-block bg-black/50 backdrop-blur-md px-4 py-2 rounded-2xl">
                             <p className="text-white font-bold text-xl drop-shadow-md shadow-black/20">{activeStory.caption || activeStory.content}</p>
                         </div>
@@ -409,7 +415,7 @@ const StoryPlayer = ({ viewStory, setViewStory, onClose }) => {
                 </div>
 
                 {/* --- 6. Footer Controls --- */}
-                <div className="absolute bottom-0 left-0 w-full z-50 p-4 pb-8 bg-linear-to-t from-black/90 via-black/50 to-transparent flex flex-col items-center gap-4">
+                <div className="absolute bottom-0 start-0 w-full z-50 p-4 pb-8 bg-linear-to-t from-black/90 via-black/50 to-transparent flex flex-col items-center gap-4">
                     {/* Viewers Eye (Owner Only) */}
                     {isMyStory && (
                         <div
@@ -420,13 +426,13 @@ const StoryPlayer = ({ viewStory, setViewStory, onClose }) => {
                                 <Eye size={18} className="text-white" />
                                 <span className="text-white font-bold text-sm">{activeStory.viewers?.length || 0}</span>
                             </div>
-                            <span className="text-[10px] text-white/60">Views</span>
+                            <span className="text-[10px] text-white/60">{t("stories.player.views")}</span> {/* 🟢 */}
                         </div>
                     )}
 
                     {/* Delete (Owner Only) */}
                     {isMyStory && (
-                        <button onClick={handleDeleteStory} className="absolute right-4 bottom-8 p-3 bg-red-500/10 hover:bg-red-500/30 rounded-full text-red-500 backdrop-blur-md pointer-events-auto transition">
+                        <button onClick={handleDeleteStory} className="absolute end-4 bottom-8 p-3 bg-red-500/10 hover:bg-red-500/30 rounded-full text-red-500 backdrop-blur-md pointer-events-auto transition">
                             <Trash2 size={20} />
                         </button>
                     )}
@@ -445,7 +451,7 @@ const StoryPlayer = ({ viewStory, setViewStory, onClose }) => {
                             >
                                 <input
                                     type="text"
-                                    placeholder="Send a message..."
+                                    placeholder={t("stories.player.replyPlaceholder")} // 🟢
                                     value={replyText}
                                     onChange={(e) => setReplyText(e.target.value)}
                                     className="flex-1 bg-transparent border border-white/30 rounded-full px-4 py-3 text-white placeholder-white/50 text-sm focus:outline-none focus:border-white focus:bg-white/5 transition backdrop-blur-md"
@@ -460,7 +466,7 @@ const StoryPlayer = ({ viewStory, setViewStory, onClose }) => {
                                         onClick={(e) => e.stopPropagation()}
                                         className="p-3 bg-white text-black rounded-full hover:scale-105 transition active:scale-95 disabled:opacity-50"
                                     >
-                                        {isSendingReply ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                                        {isSendingReply ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} className="rtl:rotate-180" />} {/* 🟢 RTL Icon */}
                                     </button>
                                 )}
                             </form>
@@ -490,8 +496,8 @@ const StoryPlayer = ({ viewStory, setViewStory, onClose }) => {
                             animate={{ opacity: 0, y: -400, scale: 1.5 }}
                             exit={{ opacity: 0 }}
                             transition={{ duration: 1.5, ease: "easeOut" }}
-                            className="absolute bottom-20 right-10 text-5xl pointer-events-none z-60"
-                            style={{ left: `${r.x}%` }}
+                            className="absolute bottom-20 end-10 text-5xl pointer-events-none z-60" // 🔵 right -> end-10
+                            style={{ left: `${r.x}%` }} // Keeps random X position logic
                         >
                             {r.char}
                         </motion.div>
@@ -504,6 +510,8 @@ const StoryPlayer = ({ viewStory, setViewStory, onClose }) => {
                         onClose={() => { setShowViewers(false); setIsPaused(false); }}
                         viewers={activeStory.viewers}
                         currentUser={user}
+                        t={t} // 🟢 Pass t function
+                        currentLocale={currentLocale} // 🟢 Pass locale
                     />
                 </AnimatePresence>
             </div>

@@ -13,6 +13,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next"; // 🟢 Import translation hook
 
 // Icons
 import { Sparkles, Type, Image as ImageIcon, X, UploadCloud, Trash2, Send } from "lucide-react";
@@ -43,6 +44,7 @@ const StoryWindow = ({ setShowModal, fetchStories }) => {
 
     // --- Hooks ---
     const { getToken } = useAuth();
+    const { t } = useTranslation(); // 🟢 Hook initialization
     const fileInputRef = useRef(null);
 
     // --- Cleanup Effect (Memory Management) ---
@@ -70,7 +72,7 @@ const StoryWindow = ({ setShowModal, fetchStories }) => {
             video.onloadedmetadata = function () {
                 window.URL.revokeObjectURL(video.src);
                 if (video.duration > 60) {
-                    toast.error("Video cannot be longer than 60 seconds!");
+                    toast.error(t("stories.window.videoTooLong")); // 🟢 Translated Toast
                     return;
                 }
                 setMedia(file);
@@ -87,8 +89,8 @@ const StoryWindow = ({ setShowModal, fetchStories }) => {
 
     // 2. Submit Story
     const handleCreateStory = async () => {
-        if (mode === "text" && !text.trim()) return toast.error("Write something!");
-        if (mode === "media" && !media) return toast.error("Select media!");
+        if (mode === "text" && !text.trim()) return toast.error(t("stories.window.emptyTextError")); // 🟢
+        if (mode === "media" && !media) return toast.error(t("stories.window.noMediaError")); // 🟢
 
         try {
             setLoading(true);
@@ -111,13 +113,13 @@ const StoryWindow = ({ setShowModal, fetchStories }) => {
             });
 
             if (data.success) {
-                toast.success("Posted! 🚀");
+                toast.success(t("stories.window.success")); // 🟢
                 fetchStories(); // Refresh list
                 setShowModal(false); // Close modal
             }
         } catch (error) {
             console.error("Story upload failed:", error);
-            toast.error("Failed to post story");
+            toast.error(t("stories.window.error")); // 🟢
         } finally {
             setLoading(false);
         }
@@ -136,14 +138,14 @@ const StoryWindow = ({ setShowModal, fetchStories }) => {
     return (
         <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-200 w-full h-full bg-black/80 backdrop-blur-sm flex items-center justify-center sm:p-4"
+            className="fixed inset-0 z-[200] w-full h-full bg-black/80 backdrop-blur-sm flex items-center justify-center sm:p-4"
         >
             <motion.div
                 initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }}
                 className="relative w-full h-full sm:max-w-[450px] sm:h-[85vh] bg-main sm:rounded-3xl flex flex-col overflow-hidden shadow-2xl border border-adaptive"
             >
                 {/* --- Header --- */}
-                <div className="absolute top-0 left-0 w-full z-50 p-4 flex items-center justify-between bg-linear-to-b from-black/60 to-transparent">
+                <div className="absolute top-0 start-0 w-full z-50 p-4 flex items-center justify-between bg-linear-to-b from-black/60 to-transparent">
                     <button onClick={() => setShowModal(false)} className="p-2 rounded-full bg-black/20 backdrop-blur-md hover:bg-white/10 text-white transition">
                         <X size={24} />
                     </button>
@@ -152,7 +154,7 @@ const StoryWindow = ({ setShowModal, fetchStories }) => {
                         disabled={loading}
                         className="px-5 py-2 rounded-full bg-primary text-white font-bold text-sm hover:opacity-90 transition disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-primary/20"
                     >
-                        {loading ? "Posting..." : <>Share <Send size={16} /></>}
+                        {loading ? t("stories.window.posting") : <>{t("stories.window.share")} <Send size={16} className="rtl:rotate-180" /></>} {/* 🟢 Translated & RTL Icon */}
                     </button>
                 </div>
 
@@ -171,12 +173,12 @@ const StoryWindow = ({ setShowModal, fetchStories }) => {
                                 className="w-full h-full flex flex-col items-center justify-center p-6"
                             >
                                 <textarea
-                                    className="w-full max-w-[85%] bg-transparent text-white p-2 resize-none outline-none text-center text-3xl font-bold placeholder-white/50 leading-relaxed font-sans caret-white overflow-hidden"
-                                    placeholder="Type your story..."
+                                    className="w-full max-w-[85%] bg-transparent text-white p-2 resize-none outline-none text-center text-3xl font-bold placeholder-white/50
+                                    leading-relaxed font-sans caret-white overflow-hidden focus:placeholder:opacity-0"
+                                    placeholder={t("stories.window.textPlaceholder")} // 🟢
                                     value={text}
                                     onChange={(e) => setText(e.target.value)}
                                     maxLength={300}
-                                    autoFocus
                                     style={{ height: 'auto' }}
                                     rows={4}
                                 />
@@ -202,7 +204,7 @@ const StoryWindow = ({ setShowModal, fetchStories }) => {
                                 <div className="absolute bottom-0 w-full p-4 bg-linear-to-t from-black/90 via-black/50 to-transparent">
                                     <input
                                         type="text"
-                                        placeholder="Add a caption..."
+                                        placeholder={t("stories.window.captionPlaceholder")} // 🟢
                                         value={text}
                                         onChange={(e) => setText(e.target.value)}
                                         className="w-full bg-white/10 backdrop-blur-md border border-white/20 rounded-full py-3 px-4 text-white placeholder-white/50 focus:outline-none focus:border-primary transition-all text-sm"
@@ -212,7 +214,7 @@ const StoryWindow = ({ setShowModal, fetchStories }) => {
 
                                 <button
                                     onClick={(e) => { e.stopPropagation(); resetMedia(); }}
-                                    className="absolute top-4 right-4 p-2 bg-black/40 rounded-full text-white hover:bg-red-500 transition z-50 mt-12"
+                                    className="absolute top-4 end-4 p-2 bg-black/40 rounded-full text-white hover:bg-red-500 transition z-50 mt-12"
                                 >
                                     <Trash2 size={20} />
                                 </button>
@@ -230,14 +232,14 @@ const StoryWindow = ({ setShowModal, fetchStories }) => {
                                 <div className="p-6 rounded-full border-2 border-dashed border-adaptive bg-main hover:bg-surface transition group">
                                     <UploadCloud size={40} className="text-primary group-hover:scale-110 transition-transform" />
                                 </div>
-                                <p className="font-bold text-muted">Upload Photo or Video</p>
+                                <p className="font-bold text-muted">{t("stories.window.uploadPlaceholder")}</p> {/* 🟢 */}
                             </motion.div>
                         )}
                     </AnimatePresence>
                 </div>
 
                 {/* --- Background Controls (Text Mode Only) --- */}
-                <div className="absolute bottom-20 left-0 w-full z-40 px-6 flex justify-center pointer-events-none">
+                <div className="absolute bottom-20 start-0 w-full z-40 px-6 flex justify-center pointer-events-none">
                     {mode === "text" && (
                         <div className="flex gap-3 overflow-x-auto p-2 pointer-events-auto max-w-full scrollbar-hide">
                             {BG_GRADIENTS.map((grad, index) => (
@@ -257,10 +259,15 @@ const StoryWindow = ({ setShowModal, fetchStories }) => {
                     <div className="bg-main p-1 rounded-xl flex relative border border-adaptive">
                         <motion.div
                             layoutId="activeTab"
-                            className="absolute top-1 bottom-1 bg-surface rounded-lg shadow-sm"
+                            className="absolute top-1 bottom-1 bg-surface rounded-sg shadow-sm"
                             initial={false}
                             style={{
-                                left: mode === "text" ? "4px" : "50%",
+                                // 🔵 Handle RTL for the slider position
+                                // Logic: If text (left/start), if media (right/end)
+                                // In RTL, "left" becomes "right". We use inline style with logic or class based.
+                                // For simplicity with framer motion layoutId, we can rely on standard positioning if directions are flipped via CSS.
+                                // But here we use 'left' property which needs flip.
+                                insetInlineStart: mode === "text" ? "4px" : "50%",
                                 width: "calc(50% - 4px)",
                             }}
                         />
@@ -268,13 +275,13 @@ const StoryWindow = ({ setShowModal, fetchStories }) => {
                             onClick={() => { setMode("text"); setText(""); }}
                             className={`flex-1 py-2 text-sm font-bold flex items-center justify-center gap-2 relative z-10 transition-colors ${mode === "text" ? "text-primary" : "text-muted hover:text-content"}`}
                         >
-                            <Type size={16} /> Text
+                            <Type size={16} /> {t("stories.window.textMode")} {/* 🟢 */}
                         </button>
                         <button
                             onClick={() => { setMode("media"); setText(""); }}
                             className={`flex-1 py-2 text-sm font-bold flex items-center justify-center gap-2 relative z-10 transition-colors ${mode === "media" ? "text-primary" : "text-muted hover:text-content"}`}
                         >
-                            <ImageIcon size={16} /> Media
+                            <ImageIcon size={16} /> {t("stories.window.mediaMode")} {/* 🟢 */}
                         </button>
                     </div>
                     <input type="file" ref={fileInputRef} accept="image/*,video/*" onChange={handleMediaUpload} className="hidden" />

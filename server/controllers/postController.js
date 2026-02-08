@@ -1002,6 +1002,18 @@ export const reportPost = expressAsyncHandler(async (req, res) => {
     const { userId } = req.auth(); // Clerk ID
     const { reason } = req.body;
 
+    // 1. a map of reasons to their translated versions
+    const REASON_MAP = {
+        "spam": "Spam",
+        "harassment": "Harassment",
+        "hateSpeech": "Hate Speech",
+        "violence": "Violence",
+        "nudity": "Nudity",
+        "other": "Other"
+    };
+
+    const formattedReason = REASON_MAP[reason] || "Other";
+
     const currentUser = await User.findOne({ clerkId: userId });
     if (!currentUser) {
         res.status(404);
@@ -1024,7 +1036,7 @@ export const reportPost = expressAsyncHandler(async (req, res) => {
     await Report.create({
         reporter: currentUser._id,
         targetPost: postId,
-        reason: reason || "Other",
+        reason: formattedReason,
     });
 
     const updatedPost = await Post.findByIdAndUpdate(

@@ -13,12 +13,14 @@ import api from "../../lib/axios"
 import { toast } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@clerk/clerk-react";
+import { useTranslation } from "react-i18next"; // 🟢
 
 // Icons
 import { X, Upload, Loader2, Users, Type } from "lucide-react";
 
 const CreateGroupModal = ({ isOpen, onClose, onGroupCreated }) => {
     const { getToken } = useAuth();
+    const { t } = useTranslation(); // 🟢
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [image, setImage] = useState(null);
@@ -35,7 +37,7 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!name.trim()) return toast.error("Group name is required!");
+        if (!name.trim()) return toast.error(t("createGroup.nameRequired")); // 🟢
 
         setLoading(true);
         const formData = new FormData();
@@ -53,7 +55,7 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated }) => {
                 withCredentials: true,
             });
 
-            toast.success("Group created successfully! 🎉");
+            toast.success(t("createGroup.success")); // 🟢
             if (onGroupCreated) onGroupCreated(res.data);
 
             // Reset & Close
@@ -65,7 +67,7 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated }) => {
 
         } catch (error) {
             console.error(error);
-            toast.error(error.response?.data?.message || "Failed to create group");
+            toast.error(error.response?.data?.message || t("createGroup.error")); // 🟢
         } finally {
             setLoading(false);
         }
@@ -96,7 +98,7 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated }) => {
                                 <div className="p-2.5 bg-primary/10 rounded-xl">
                                     <Users className="text-primary" size={22} />
                                 </div>
-                                <h3 className="text-xl font-extrabold text-content">Create Group</h3>
+                                <h3 className="text-xl font-extrabold text-content">{t("createGroup.title")}</h3> {/* 🟢 */}
                             </div>
                             <button onClick={onClose} className="text-muted hover:text-content transition bg-transparent hover:bg-main p-2 rounded-full">
                                 <X size={20} />
@@ -115,36 +117,36 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated }) => {
                                         <Upload className="text-muted group-hover:text-primary transition-colors" size={32} />
                                     )}
                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-300 backdrop-blur-[1px]">
-                                        <span className="text-xs text-white font-bold bg-black/50 px-2 py-1 rounded-md">Change</span>
+                                        <span className="text-xs text-white font-bold bg-black/50 px-2 py-1 rounded-md">{t("createGroup.change")}</span> {/* 🟢 */}
                                     </div>
                                     <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
                                 </label>
-                                <span className="text-xs text-muted font-bold uppercase tracking-widest">Group Icon</span>
+                                <span className="text-xs text-muted font-bold uppercase tracking-widest">{t("createGroup.iconLabel")}</span> {/* 🟢 */}
                             </div>
 
                             {/* Inputs */}
                             <div className="space-y-5">
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-muted uppercase ml-1">Group Name</label>
+                                    <label className="text-xs font-bold text-muted uppercase ms-1">{t("createGroup.nameLabel")}</label> {/* 🟢 */}
                                     <div className="relative group focus-within:text-primary transition-colors">
-                                        <Type className="absolute left-3 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary transition-colors" size={18} />
+                                        <Type className="absolute start-3 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary transition-colors" size={18} /> {/* 🔵 start-3 */}
                                         <input
                                             type="text"
                                             value={name}
                                             onChange={(e) => setName(e.target.value)}
-                                            className="w-full bg-main border border-adaptive rounded-xl py-3 pl-10 pr-4 text-content focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-muted/70"
-                                            placeholder="e.g. Football Fans ⚽"
+                                            className="w-full bg-main border border-adaptive rounded-xl py-3 ps-10 pe-4 text-content focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-muted/70" // 🔵 ps-10 pe-4
+                                            placeholder={t("createGroup.namePlaceholder")} // 🟢
                                         />
                                     </div>
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-muted uppercase ml-1">Description</label>
+                                    <label className="text-xs font-bold text-muted uppercase ms-1">{t("createGroup.descLabel")}</label> {/* 🟢 */}
                                     <textarea
                                         value={description}
                                         onChange={(e) => setDescription(e.target.value)}
                                         className="w-full bg-main border border-adaptive rounded-xl px-4 py-3 text-content focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all resize-none h-24 placeholder-muted/70 leading-relaxed custom-scrollbar"
-                                        placeholder="What is this group about?"
+                                        placeholder={t("createGroup.descPlaceholder")} // 🟢
                                     />
                                 </div>
                             </div>
@@ -155,7 +157,7 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated }) => {
                                 disabled={loading}
                                 className="w-full py-3.5 bg-primary hover:bg-primary/90 rounded-xl text-white font-bold shadow-lg shadow-primary/25 active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                             >
-                                {loading ? <Loader2 className="animate-spin" /> : "Create Group 🚀"}
+                                {loading ? <Loader2 className="animate-spin" /> : t("createGroup.createBtn")} {/* 🟢 */}
                             </button>
                         </form>
                     </motion.div>

@@ -1,11 +1,3 @@
-/**
- * UserAvatar Component
- * ------------------------------------------------------------------
- * Displays user profile image with story ring indicator.
- * Handles story viewing on click if available (and not own story).
- * Optimized to prevent unnecessary portal rendering.
- */
-
 import { useState, useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { useSelector } from "react-redux";
@@ -15,12 +7,29 @@ const UserAvatar = ({ user, className = "w-10 h-10", onCloseStory }) => {
     const [viewStory, setViewStory] = useState(null);
     const { currentUser } = useSelector((state) => state.user);
 
+    // 🕵️‍♂️ 1. هل أنا بتابع الشخص ده؟
+    const amIFollowing = useMemo(() => {
+        if (!currentUser || !currentUser.following) return false;
+        // بنعمل check ذكي عشان لو المصفوفة فيها IDs بس أو Objects كاملة
+        return currentUser.following.some(f => {
+            const id = typeof f === 'string' ? f : f._id;
+            return id === user?._id;
+        });
+    }, [currentUser, user?._id]);
+
+    // 🕵️‍♂️ 2. هل مسموح لي أشوف الستوري؟
+    // مسموح لو: (الحساب عام) أو (الحساب خاص وأنا بتابعه) أو (ده حسابي أنا)
+    const isAccessAllowed = !user?.isPrivate || amIFollowing || (currentUser?._id === user?._id);
+
     // Derived State
     const stories = user?.stories || [];
     const isOwner = currentUser?._id === user?._id;
-    const hasStories = !isOwner && stories.length > 0;
 
-    // Memoize gradient ID to keep it stable across renders
+    // 🟢 التعديل هنا: ربطنا وجود الستوري بالسماحية
+    // لو فيه ستوريز بس مش مسموح لي أشوفها (عشان خاص ومش بتابعه) -> hasStories هتبقى false
+    const hasStories = !isOwner && stories.length > 0 && isAccessAllowed;
+
+    // Memoize gradient ID
     const gradientId = useMemo(() => `avatar-grad-${user?._id || Math.random()}`, [user?._id]);
 
     // Check for unseen stories
@@ -33,6 +42,7 @@ const UserAvatar = ({ user, className = "w-10 h-10", onCloseStory }) => {
     }, [hasStories, stories]);
 
     const handleAvatarClick = (e) => {
+        // 🟢 هنا برضو الشرط هيمنع الفتح لو hasStories بـ false
         if (hasStories) {
             e.stopPropagation();
             setViewStory({
@@ -57,7 +67,7 @@ const UserAvatar = ({ user, className = "w-10 h-10", onCloseStory }) => {
                 className={`relative inline-block shrink-0 ${className} ${hasStories ? "cursor-pointer" : "cursor-default"}`}
                 onClick={handleAvatarClick}
             >
-                {/* Story Ring (Only if has stories & not owner) */}
+                {/* Story Ring (Only if has stories, not owner, AND ACCESS ALLOWED) */}
                 {hasStories && (
                     <svg
                         className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
@@ -102,7 +112,7 @@ const UserAvatar = ({ user, className = "w-10 h-10", onCloseStory }) => {
                 />
             </div>
 
-            {/* Story Modal (Rendered only when active) */}
+            {/* Story Modal */}
             {viewStory && createPortal(
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm">
                     <StoryPlayer

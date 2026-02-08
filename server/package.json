@@ -13,7 +13,9 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@clerk/clerk-sdk-node": "^4.13.23",
     "@clerk/express": "^1.7.45",
+    "@google/generative-ai": "^0.24.1",
     "@imagekit/nodejs": "^7.1.1",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
@@ -22,6 +24,7 @@
     "express-async-handler": "^1.2.0",
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^8.2.1",
+    "firebase-admin": "^13.6.0",
     "helmet": "^8.1.0",
     "hpp": "^0.2.3",
     "imagekit": "^6.0.0",

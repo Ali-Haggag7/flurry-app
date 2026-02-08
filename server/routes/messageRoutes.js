@@ -21,6 +21,8 @@ import {
     markMessagesAsRead,
     deleteConversation,
     reactToMessage,
+    deleteMessage,
+    editMessage
 } from "../controllers/messageController.js";
 
 const messageRouter = express.Router();
@@ -76,6 +78,20 @@ messageRouter.put("/read/:senderId", protect, markMessagesAsRead);
  * @access Private
  */
 messageRouter.delete("/conversation/:targetId", protect, deleteConversation);
+
+/**
+ * @route DELETE /api/message/:id
+ * @desc Delete a specific message
+ * @access Private
+ */
+messageRouter.delete("/:id", protect, deleteMessage);
+
+/**
+ * @route PUT /api/message/:id
+ * @desc Edit a specific message
+ * @access Private
+ */
+messageRouter.put("/:id", protect, editMessage);
 
 // ==============================================================================
 // 3. Dynamic Routes (Low Priority)

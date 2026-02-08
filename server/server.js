@@ -25,6 +25,7 @@ import storyRouter from "./routes/storyRoutes.js";
 import messageRouter from "./routes/messageRoutes.js";
 import notificationRouter from "./routes/notificationRoutes.js";
 import groupRouter from "./routes/groupRoutes.js";
+import gemeniRouter from "./routes/gemeniRoutes.js";
 
 // =========================================================
 // 1. Server Configuration & Security
@@ -107,6 +108,7 @@ app.use("/api/story", storyRouter);
 app.use("/api/message", messageRouter);
 app.use("/api/notifications", notificationRouter);
 app.use("/api/group", groupRouter);
+app.use("/api/gemeni", gemeniRouter);
 
 // =========================================================
 // 5. Error Handling Strategy

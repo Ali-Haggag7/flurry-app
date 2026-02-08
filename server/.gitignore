@@ -1,15 +1,52 @@
-# Dependencies
-node_modules
-
-# Environment Variables
+# ---------------------------------
+# 🛑 Security & Secrets
+# ---------------------------------
 .env
 .env.local
-.env.*
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+*.env.*
 
-# Logs
+firebase-key.json
+service-account.json
+*.pem
+*.key
+
+# ---------------------------------
+# 📦 Dependencies
+# ---------------------------------
+node_modules
+/node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---------------------------------
+# ⚙️ OS & IDE Files 
+# ---------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+
+# ---------------------------------
+# 📝 Logs & Runtime
+# ---------------------------------
 logs
 *.log
-npm-debug.log*
+pids
+*.pid
+*.seed
+*.pid.lock
 
-# OS Files
-.DS_Store
+# ---------------------------------
+# 🚀 Build & Dist
+# ---------------------------------
+dist/
+build/
+coverage/

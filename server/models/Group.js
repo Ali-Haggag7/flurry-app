@@ -70,6 +70,10 @@ const groupSchema = new mongoose.Schema(
                 },
             ],
         },
+        isChatLocked: {
+            type: Boolean,
+            default: false
+        },
     },
     {
         timestamps: true, // Auto-manage createdAt / updatedAt

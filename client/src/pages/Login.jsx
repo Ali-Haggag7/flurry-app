@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { SignIn } from "@clerk/clerk-react";
 import { motion } from "framer-motion";
 import { Sparkles, MessageCircle, ShieldCheck } from "lucide-react";
+import { useTranslation } from "react-i18next"; // 🟢 Import translation hook
 
 // --- Local Imports ---
 import Logo from "../components/common/Logo";
@@ -17,7 +18,7 @@ const FADE_UP_VARIANTS = {
 };
 
 const FADE_RIGHT_VARIANTS = {
-    hidden: { opacity: 0, x: -50 },
+    hidden: { opacity: 0, x: -50 }, // ⚠️ Note: In RTL this might need adjustment if you want it coming from the right
     visible: (delay = 0) => ({
         opacity: 1,
         x: 0,
@@ -33,6 +34,8 @@ const FADE_RIGHT_VARIANTS = {
  * a right section containing the Clerk SignIn form styled to match the application theme.
  */
 const Login = () => {
+    const { t } = useTranslation(); // 🟢 Hook initialization
+
     // Memoize Clerk appearance to prevent unnecessary re-calculations on render
     const clerkAppearance = useMemo(
         () => ({
@@ -57,12 +60,12 @@ const Login = () => {
                 socialButtonsBlockButtonArrow: "!text-content",
                 dividerLine: "bg-adaptive",
                 dividerText: "text-muted bg-transparent px-2",
-                formFieldLabel: "text-content font-medium ml-1 mb-1.5",
+                formFieldLabel: "text-content font-medium ms-1 mb-1.5", // 🔵 ms-1 (Margin Start) for RTL
                 formFieldInput:
                     "bg-main border-adaptive focus:border-primary focus:ring-1 focus:ring-primary transition-all text-content",
                 formButtonPrimary:
                     "bg-primary hover:opacity-90 shadow-lg shadow-primary/25 transition-all text-white font-bold py-3",
-                footerActionLink: "text-primary hover:text-primary/80 font-bold ml-1",
+                footerActionLink: "text-primary hover:text-primary/80 font-bold ms-1", // 🔵 ms-1
                 footer: "hidden",
                 identityPreviewText: "text-muted",
                 identityPreviewEditButton: "text-primary hover:text-primary/80",
@@ -104,8 +107,8 @@ const Login = () => {
                     custom={0.2}
                     className="text-6xl xl:text-7xl font-black tracking-tighter leading-tight mb-8 text-content drop-shadow-xl"
                 >
-                    Share Your <br />
-                    <span className="text-content">Digital Soul</span>
+                    {t("login.hero.titleStart")} <br />
+                    <span className="text-content">{t("login.hero.titleHighlight")}</span>
                     <span className="text-primary"> .</span>
                 </motion.h1>
 
@@ -116,18 +119,17 @@ const Login = () => {
                     transition={{ duration: 0.8, delay: 0.4 }}
                     className="text-xl text-muted max-w-lg leading-relaxed mb-12 font-medium"
                 >
-                    A modern space for developers and creators. No noise, just pure
-                    connection. Built for the future.
+                    {t("login.hero.description")}
                 </motion.p>
 
                 {/* Feature Badge */}
-                <FeatureBadge delay={0.6} />
+                <FeatureBadge delay={0.6} t={t} /> {/* 🟢 Pass t function */}
             </div>
 
             {/* ================= RIGHT SECTION (Form) ================= */}
             <div className="w-full lg:w-[45%] flex flex-col items-center justify-center p-6 z-10 relative">
                 {/* Mobile Branding */}
-                <MobileBranding />
+                <MobileBranding t={t} /> {/* 🟢 Pass t function */}
 
                 {/* Clerk Sign In */}
                 <motion.div
@@ -157,8 +159,8 @@ const Login = () => {
  */
 const BackgroundEffects = React.memo(() => (
     <div className="absolute inset-0 z-0 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px] opacity-30"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-900/20 rounded-full blur-[120px] opacity-30"></div>
+        <div className="absolute top-[-10%] start-[-10%] w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px] opacity-30"></div> {/* 🔵 left -> start */}
+        <div className="absolute bottom-[-10%] end-[-10%] w-[500px] h-[500px] bg-purple-900/20 rounded-full blur-[120px] opacity-30"></div> {/* 🔵 right -> end */}
     </div>
 ));
 
@@ -166,21 +168,21 @@ const BackgroundEffects = React.memo(() => (
  * MobileBranding
  * Visible only on smaller screens.
  */
-const MobileBranding = React.memo(() => (
+const MobileBranding = React.memo(({ t }) => ( // 🟢 Receive t prop
     <motion.div
         variants={FADE_UP_VARIANTS}
         initial="hidden"
         animate="visible"
         className="lg:hidden mb-8 flex flex-col items-center gap-2"
     >
-        <div className="flex items-center gap-3 mr-6">
+        <div className="flex items-center gap-3 me-6"> {/* 🔵 mr-6 -> me-6 */}
             <Logo className="w-14 h-14" showText={false} />
             <span className="text-3xl font-black tracking-tight text-content">
                 FLURRY
             </span>
         </div>
         <p className="text-muted text-sm mt-2 font-medium">
-            Welcome back, Legend! 👋
+            {t("login.welcomeBack")} 👋
         </p>
     </motion.div>
 ));
@@ -189,7 +191,7 @@ const MobileBranding = React.memo(() => (
  * FeatureBadge
  * Displays the project showcase pill with icons.
  */
-const FeatureBadge = React.memo(({ delay }) => (
+const FeatureBadge = React.memo(({ delay, t }) => ( // 🟢 Receive t prop
     <motion.div
         variants={FADE_UP_VARIANTS}
         initial="hidden"
@@ -210,8 +212,8 @@ const FeatureBadge = React.memo(({ delay }) => (
         </div>
         <div className="h-8 w-[1px] bg-adaptive mx-2"></div>
         <div className="flex flex-col">
-            <span className="text-sm font-bold text-content">Project Showcase</span>
-            <span className="text-xs text-muted">Secure • Real-time • Fast</span>
+            <span className="text-sm font-bold text-content">{t("login.badge.title")}</span>
+            <span className="text-xs text-muted">{t("login.badge.subtitle")}</span>
         </div>
     </motion.div>
 ));

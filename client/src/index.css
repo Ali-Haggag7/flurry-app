@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 /* =========================================
-  🎨 Tailwind Theme Configuration (v4)
-  Mapping CSS variables to utility classes
-  =========================================
+   🎨 Tailwind Theme Configuration (v4)
+   Mapping CSS variables to utility classes
+   =========================================
 */
 @theme {
     /* Backgrounds */
@@ -18,14 +18,16 @@
     --color-adaptive: var(--color-border);
     --color-primary: var(--color-primary);
 
-    /* Fonts */
-    --font-sans: 'Outfit', sans-serif;
+    /* Fonts - Mapped to a dynamic variable to support language switching */
+    --font-sans: var(--font-dynamic);
 }
 
 /* =========================================
-  🔤 Typography System
-  =========================================
+   🔤 Typography System
+   =========================================
 */
+
+/* Local Font: Outfit (English) */
 @font-face {
     font-family: 'Outfit';
     font-style: normal;
@@ -43,8 +45,8 @@
 }
 
 /* =========================================
-  🛠️ Base Styles & Theme Definitions
-  =========================================
+   🛠️ Base Styles & Theme Definitions
+   =========================================
 */
 @layer base {
 
@@ -73,6 +75,14 @@
         --scrollbar-track: var(--color-bg);
         --scrollbar-thumb: var(--color-surface);
         --scrollbar-thumb-hover: var(--color-primary);
+
+        /* Default Font (LTR - English) */
+        --font-dynamic: 'Outfit', sans-serif;
+    }
+
+    /* --- 🌍 RTL Support (Arabic) --- */
+    :root[dir="rtl"] {
+        --font-dynamic: 'Cairo', sans-serif;
     }
 
     /* Dark Mode Accents */
@@ -80,32 +90,22 @@
         --color-primary: #10b981;
     }
 
-    /* Emerald 500 */
     :root[data-accent='red'] {
         --color-primary: #f43f5e;
     }
 
-    /* Rose 500 */
-
     /* --- ☀️ Theme: Light (Modern Clean) --- */
     :root[data-theme='light'] {
         --color-bg: #f9fafb;
-        /* Gray 50 */
         --color-surface: #ffffff;
-        /* White */
         --color-text-main: #111827;
-        /* Gray 900 */
         --color-text-sec: #6b7280;
-        /* Gray 500 */
         --color-border: #e5e7eb;
-        /* Gray 200 */
         --color-primary: #2563eb;
-        /* Blue 600 */
 
         /* Light Mode Scrollbar */
         --scrollbar-track: transparent;
         --scrollbar-thumb: #d1d5db;
-        /* Gray 300 */
     }
 
     /* Light Mode Accents */
@@ -113,31 +113,22 @@
         --color-primary: #059669;
     }
 
-    /* Emerald 600 */
     :root[data-theme='light'][data-accent='orange'] {
         --color-primary: #ea580c;
     }
 
-    /* Orange 600 */
-
     /* --- 🦄 Theme: Fantasy (Deep Space & Neon) --- */
     :root[data-theme='fantasy'] {
         --color-bg: #0b0214;
-        /* Deep Violet */
         --color-surface: #1a0b2e;
-        /* Black Currant */
         --color-text-main: #e9d5ff;
-        /* Purple 100 */
         --color-text-sec: #a855f7;
-        /* Purple 500 */
         --color-border: rgba(216, 180, 254, 0.1);
         --color-primary: #d946ef;
-        /* Fuchsia 500 */
 
         /* Fantasy Scrollbar */
         --scrollbar-track: var(--color-bg);
         --scrollbar-thumb: #4c1d95;
-        /* Violet 900 */
     }
 
     /* Fantasy Accents */
@@ -145,12 +136,9 @@
         --color-primary: #06b6d4;
     }
 
-    /* Cyan 500 */
     :root[data-theme='fantasy'][data-accent='yellow'] {
         --color-primary: #eab308;
     }
-
-    /* Yellow 500 */
 
     /* --- Global Body Styles --- */
     body {
@@ -167,17 +155,20 @@
     }
 
     /* --- Custom Scrollbar Implementation --- */
+    html,
+    body,
     * {
         scrollbar-width: thin;
         scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
     }
 
+    /* Chrome, Edge, and Safari */
     ::-webkit-scrollbar {
         width: 14px;
     }
 
     ::-webkit-scrollbar-track {
-        background-color: var(--scrollbar-track);
+        background-color: transparent;
     }
 
     ::-webkit-scrollbar-thumb {
@@ -185,18 +176,31 @@
         background-clip: content-box;
         border: 4px solid transparent;
         border-radius: 99px;
-        /* Pill shape */
     }
 
     ::-webkit-scrollbar-thumb:hover {
         background-color: var(--color-primary);
-        border-width: 0 3px;
+        border-width: 3px;
+    }
+
+    html[dir="rtl"] * {
+        scrollbar-width: none !important;
+        /* Firefox */
+        -ms-overflow-style: none !important;
+        /* IE 10+ */
+    }
+
+    html[dir="rtl"] ::-webkit-scrollbar {
+        display: none !important;
+        /* Chrome/Safari/Webkit */
+        width: 0px;
+        background: transparent;
     }
 }
 
 /* =========================================
-  🔧 Utilities
-  =========================================
+   🔧 Utilities
+   =========================================
 */
 @layer utilities {
     .scrollbar-hide {
@@ -210,8 +214,8 @@
 }
 
 /* =========================================
-  🧩 Components & Animations
-  =========================================
+   🧩 Components & Animations
+   =========================================
 */
 @layer components {
 
@@ -267,6 +271,7 @@
     }
 }
 
+/* Clerk Overrides */
 .cl-internal-x7ixen {
     color: var(--color-text-main) !important;
 }
@@ -279,14 +284,14 @@
     display: none !important;
 }
 
-.cl-internal-1c2qq50{
+.cl-internal-1c2qq50 {
     margin-top: 0 !important;
     background-color: transparent !important;
 }
 
 /* =========================================
-  🎬 Keyframes
-  =========================================
+   🎬 Keyframes
+   =========================================
 */
 @keyframes wave {
 

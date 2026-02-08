@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "@clerk/clerk-react";
 import { Plus } from "lucide-react";
+import { useTranslation } from "react-i18next"; // 🟢 Import translation hook
 
 // API
 import api from "../../lib/axios";
@@ -21,7 +22,7 @@ import StoryRing from "./StoryRing";
 
 // --- Sub-Components ---
 
-const AddStoryButton = memo(({ onClick }) => {
+const AddStoryButton = memo(({ onClick, t }) => { // 🟢 Receive t prop
     return (
         <motion.div
             onClick={onClick}
@@ -36,16 +37,19 @@ const AddStoryButton = memo(({ onClick }) => {
                         <Plus className="w-8 h-8 text-primary transition-transform group-hover:scale-110" strokeWidth={2.5} />
                     </div>
                 </div>
-                <div className="absolute bottom-0 right-0 bg-primary text-white rounded-full p-1 border-[3px] border-surface shadow-md z-20">
+                <div className="absolute bottom-0 end-0 bg-primary text-white rounded-full p-1 border-[3px] border-surface shadow-md z-20">
                     <Plus size={12} strokeWidth={4} />
                 </div>
             </div>
-            <p className="text-xs text-content font-semibold group-hover:text-primary transition-colors">Your Story</p>
+            {/* 🟢 Translated Label */}
+            <p className="text-xs text-content font-semibold group-hover:text-primary transition-colors">
+                {t("stories.yourStory")}
+            </p>
         </motion.div>
     );
 });
 
-const StoryItem = memo(({ story, onView, index }) => {
+const StoryItem = memo(({ story, onView, index, t }) => { // 🟢 Receive t prop
     // Optimization: Prioritize the first 4 visible stories for LCP
     const isPriority = index < 4;
 
@@ -75,7 +79,8 @@ const StoryItem = memo(({ story, onView, index }) => {
             </div>
 
             <p className={`text-xs font-medium truncate w-16 text-center ${story.hasUnseen ? 'text-content font-bold' : 'text-muted'}`}>
-                {story.user.username?.split(' ')[0] || "User"}
+                {/* 🟢 Translated Default User Name */}
+                {story.user.username?.split(' ')[0] || t("stories.defaultUser")}
             </p>
         </motion.div>
     );
@@ -88,6 +93,7 @@ const StoriesBar = () => {
     const [showModal, setShowModal] = useState(false);
     const [viewStory, setViewStory] = useState(null);
     const { getToken } = useAuth();
+    const { t } = useTranslation(); // 🟢 Hook initialization
 
     const fetchStories = useCallback(async () => {
         try {
@@ -115,7 +121,8 @@ const StoriesBar = () => {
         <>
             <div className="w-full bg-surface/80 backdrop-blur-xl border-b border-adaptive py-5 rounded-b-2xl mb-6 shadow-sm relative z-0">
                 <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide px-4 pb-2">
-                    <AddStoryButton onClick={() => setShowModal(true)} />
+                    {/* 🟢 Pass t function to children */}
+                    <AddStoryButton onClick={() => setShowModal(true)} t={t} />
 
                     {stories?.map((story, index) => (
                         <StoryItem
@@ -123,6 +130,7 @@ const StoriesBar = () => {
                             story={story}
                             index={index} // Passing index to determine LCP priority
                             onView={handleViewStory}
+                            t={t} // 🟢 Pass t function
                         />
                     ))}
                 </div>

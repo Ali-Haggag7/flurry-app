@@ -1,45 +1,51 @@
 /**
  * @fileoverview Socket.io Server Configuration
- * Handles real-time connections, personalized presence, and blocking logic.
- * @version 1.3.0 (Privacy Enhanced)
+ * ------------------------------------------------------------------
+ * Architect: Senior Backend Architect
+ * Purpose: centralized real-time gateway handling:
+ * 1. Connection Lifecycle & Authentication
+ * 2. Personalized Presence System (Ghost Mode + Block Logic)
+ * 3. WebRTC Signaling (1:1 Video/Audio Calls)
+ * 4. Messaging & Group Events
+ * * @version 1.4.0
  */
 
 import { Server } from "socket.io";
 import http from "http";
 import express from "express";
-import Message from "../models/Message.js";
-import User from "../models/User.js";
 import cors from "cors";
 
+// Models
+import Message from "../models/Message.js";
+import User from "../models/User.js";
+
 // ==========================================
-// --- Server & Socket Initialization ---
+// --- Server Configuration ---
 // ==========================================
 
 const app = express();
 const server = http.createServer(app);
 
+// Environment & CORS Config
 const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:4173",
     "https://flurry-app.vercel.app",
-    /\.vercel\.app$/
+    /\.vercel\.app$/ // Regex to allow Vercel preview deployments
 ];
 
-app.use(
-    cors({
-        origin: allowedOrigins,
-        credentials: true, // عشان الكوكيز والتوكنز تمر
-        methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization"],
-    })
-);
+const corsConfig = {
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+};
+
+app.use(cors(corsConfig));
 
 const io = new Server(server, {
-    cors: {
-        origin: allowedOrigins,
-        methods: ["GET", "POST"],
-        credentials: true,
-    },
+    cors: corsConfig,
+    pingTimeout: 60000, // Close connection after 60s of inactivity
 });
 
 app.set("io", io);
@@ -48,27 +54,46 @@ app.set("io", io);
 // --- State Management ---
 // ==========================================
 
-export const userSocketMap = {}; // { userId: socketId }
+/**
+ * Maps User IDs to their current active Socket ID.
+ * @type {Object.<string, string>}
+ */
+export const userSocketMap = {};
+
+/**
+ * Tracks users who have enabled "Ghost Mode" (Hidden Status).
+ * @type {Set<string>}
+ */
 const hiddenUsers = new Set();
 
+/**
+ * Retrieves the socket ID for a given user ID.
+ * @param {string} receiverId 
+ * @returns {string|undefined}
+ */
 export const getReceiverSocketId = (receiverId) => {
     return userSocketMap[receiverId];
 };
 
+// ==========================================
+// --- Core Logic: Presence System ---
+// ==========================================
+
 /**
- * 🔥 Core Function: Emit Personalized Online Lists
- * This replaces the old simple emit to handle Block Logic.
+ * Emits a personalized list of online users to each connected client.
+ * filtering out users based on Block Lists and Privacy Settings.
  */
 const emitOnlineUsers = async () => {
     try {
         const onlineIds = Object.keys(userSocketMap);
+        if (onlineIds.length === 0) return;
 
-        // 1. Fetch Blocking Info for ALL online users in one query (Optimization)
-        // بنجيب مين مبلك مين لكل الناس الفاتحة دلوقتي عشان منعملش كويري جوا اللوب
+        // Optimization: Fetch blocking/privacy data for ALL online users in one query
         const onlineUsersData = await User.find({ _id: { $in: onlineIds } })
-            .select('_id blockedUsers hideOnlineStatus');
+            .select('_id blockedUsers hideOnlineStatus')
+            .lean(); // Use lean() for faster execution
 
-        // 2. Create a fast Lookup Map
+        // Create a fast Lookup Map O(1)
         const privacyMap = new Map();
         onlineUsersData.forEach(u => {
             privacyMap.set(u._id.toString(), {
@@ -77,41 +102,32 @@ const emitOnlineUsers = async () => {
             });
         });
 
-        // 3. Iterate over all connected sockets to send personalized lists
+        // Iterate connected sockets to send personalized views
         const sockets = await io.fetchSockets();
 
         for (const socket of sockets) {
             const recipientId = socket.handshake.query.userId;
-
             if (!recipientId) continue;
 
-            // Filter the list specifically for THIS recipient
             const personalizedList = onlineIds.filter(targetId => {
                 if (targetId === recipientId) return true; // Always see self
 
                 const targetData = privacyMap.get(targetId);
-
-                // Safety check if data is missing
                 if (!targetData) return false;
 
-                // Rule 1: If Target enabled "Ghost Mode" -> Hidden
+                // Rule 1: Ghost Mode
                 if (targetData.hideOnlineStatus || hiddenUsers.has(targetId)) return false;
 
-                // Rule 2: If Target has BLOCKED Recipient -> Hidden (وده طلبك)
+                // Rule 2: Blocking Logic (Target blocks Recipient)
                 if (targetData.blockedUsers.has(recipientId)) return false;
-
-                // Rule 3 (Optional): If Recipient blocked Target -> Hidden (Usually standard behavior)
-                // ممكن تجيب داتا المستلم وتعملها هنا لو حابب، بس حالياً ركزنا على القاعدة 2
 
                 return true;
             });
 
-            // Send the custom list to this specific user only
             io.to(socket.id).emit("getOnlineUsers", personalizedList);
         }
-
     } catch (error) {
-        console.error("Error emitting online users:", error);
+        console.error("[Socket] Error emitting online users:", error);
     }
 };
 
@@ -120,48 +136,95 @@ const emitOnlineUsers = async () => {
 // ==========================================
 
 io.on("connection", async (socket) => {
-    console.log(`🔌 User Connected: ${socket.id}`);
     const userId = socket.handshake.query.userId;
 
-    if (userId && userId !== "undefined") {
-        userSocketMap[userId] = socket.id;
-
-        // --- Check Privacy Settings from DB on Connect ---
-        try {
-            const user = await User.findById(userId).select("hideOnlineStatus blockedUsers");
-            if (user?.hideOnlineStatus) {
-                hiddenUsers.add(userId);
-            }
-        } catch (error) {
-            console.error(`Error fetching user data:`, error);
-        }
-
-        // --- Message Delivery Logic ---
-        const markAsDelivered = async () => {
-            try {
-                await Message.updateMany(
-                    { receiver: userId, delivered: false },
-                    { $set: { delivered: true } }
-                );
-                const senders = await Message.distinct("sender", { receiver: userId });
-                senders.forEach((senderId) => {
-                    const senderSocketId = userSocketMap[senderId.toString()];
-                    if (senderSocketId) {
-                        io.to(senderSocketId).emit("messagesDelivered", { toUserId: userId });
-                    }
-                });
-            } catch (err) {
-                console.error(err);
-            }
-        };
-        markAsDelivered();
+    // 1. Validation & Initialization
+    if (!userId || userId === "undefined") {
+        console.warn(`[Socket] Connection rejected: Invalid userId (${socket.id})`);
+        socket.disconnect();
+        return;
     }
 
-    // 🔥 Broadcast Status (Using the new personalized function)
+    console.log(`🔌 User Connected: ${userId} (${socket.id})`);
+    userSocketMap[userId] = socket.id;
+
+    // 2. Initial State Sync (DB -> Memory)
+    try {
+        const user = await User.findById(userId).select("hideOnlineStatus").lean();
+        if (user?.hideOnlineStatus) {
+            hiddenUsers.add(userId);
+        }
+
+        // Mark pending messages as delivered
+        await Message.updateMany(
+            { receiver: userId, delivered: false },
+            { $set: { delivered: true } }
+        );
+
+        // Notify senders that messages were delivered
+        const pendingSenders = await Message.distinct("sender", { receiver: userId, delivered: true }); // Optimized query
+        pendingSenders.forEach((senderId) => {
+            const senderSocketId = userSocketMap[senderId.toString()];
+            if (senderSocketId) {
+                io.to(senderSocketId).emit("messagesDelivered", { toUserId: userId });
+            }
+        });
+
+    } catch (error) {
+        console.error(`[Socket] Error initializing user ${userId}:`, error);
+    }
+
+    // Broadcast updated presence
     await emitOnlineUsers();
 
+
     // ==========================================
-    // --- Event Listeners ---
+    // --- FEATURE: WebRTC Signaling (Calls) ---
+    // ==========================================
+
+    /**
+     * INITIATE CALL
+     * Payload: { userToCall, signalData, from, name, isVideoCall }
+     */
+    socket.on("callUser", ({ userToCall, signalData, from, name, isVideoCall }) => {
+        const socketIdToCall = userSocketMap[userToCall];
+        if (socketIdToCall) {
+            io.to(socketIdToCall).emit("callUser", {
+                signal: signalData,
+                from,
+                name,
+                isVideoCall
+            });
+        } else {
+            // Optional: Emit 'userOffline' to caller if needed
+            // io.to(from).emit("callFailed", { reason: "offline" }); 
+        }
+    });
+
+    /**
+     * ANSWER CALL
+     * Payload: { signal, to } 
+     * Note: 'to' here is the socket ID of the caller (from handshake)
+     */
+    socket.on("answerCall", (data) => {
+        io.to(data.to).emit("callAccepted", data.signal);
+    });
+
+    /**
+     * END CALL
+     * Payload: { id } (Can be userId or socketId)
+     */
+    socket.on("endCall", ({ id }) => {
+        // Smart Check: Resolve socket ID whether user sent DB ID or Socket ID
+        const socketIdToEnd = userSocketMap[id] || id;
+        if (socketIdToEnd) {
+            io.to(socketIdToEnd).emit("callEnded");
+        }
+    });
+
+
+    // ==========================================
+    // --- FEATURE: Messaging & Status ---
     // ==========================================
 
     socket.on("messageReceivedConfirm", ({ messageId, senderId, receiverId }) => {
@@ -169,28 +232,6 @@ io.on("connection", async (socket) => {
         if (senderSocket) {
             io.to(senderSocket).emit("messageDelivered", { messageId, toUserId: receiverId });
         }
-    });
-
-    socket.on("joinGroup", (groupId) => {
-        socket.join(groupId);
-    });
-
-    socket.on("typingGroup", ({ groupId, username, image }) => {
-        socket.to(groupId).emit("typingGroup", { username, image });
-    });
-
-    socket.on("stop typingGroup", (groupId) => {
-        socket.to(groupId).emit("stop typingGroup");
-    });
-
-    socket.on("toggleOnlineStatus", async ({ isHidden }) => {
-        if (isHidden) {
-            hiddenUsers.add(userId);
-        } else {
-            hiddenUsers.delete(userId);
-        }
-        // Refresh lists for everyone immediately
-        await emitOnlineUsers();
     });
 
     socket.on("typing", (receiverId) => {
@@ -203,19 +244,58 @@ io.on("connection", async (socket) => {
         if (receiverSocketId) io.to(receiverSocketId).emit("stop typing");
     });
 
-    // Handle Disconnect
+    socket.on("toggleOnlineStatus", async ({ isHidden }) => {
+        if (isHidden) hiddenUsers.add(userId);
+        else hiddenUsers.delete(userId);
+
+        await emitOnlineUsers();
+    });
+
+
+    // ==========================================
+    // --- FEATURE: Group Chats ---
+    // ==========================================
+
+    socket.on("joinGroup", (groupId) => {
+        if (!groupId) return;
+        socket.join(groupId);
+        // console.debug(`[Group] ${userId} joined ${groupId}`);
+    });
+
+    socket.on("leaveGroup", (groupId) => {
+        if (!groupId) return;
+        socket.leave(groupId);
+    });
+
+    socket.on("typingGroup", ({ groupId, username, image }) => {
+        socket.to(groupId).emit("typingGroup", { username, image });
+    });
+
+    socket.on("stop typingGroup", (groupId) => {
+        socket.to(groupId).emit("stop typingGroup");
+    });
+
+
+    // ==========================================
+    // --- Disconnect Handler ---
+    // ==========================================
+
     socket.on("disconnect", async () => {
-        console.log(`❌ User Disconnected: ${socket.id}`);
+        console.log(`❌ User Disconnected: ${userId}`);
+
         if (userId) {
+            // Update Last Seen in DB
             try {
                 await User.findByIdAndUpdate(userId, { lastSeen: new Date() });
             } catch (error) {
-                console.error(error);
+                console.error("[Socket] Error updating lastSeen:", error);
             }
+
+            // Cleanup Memory
             delete userSocketMap[userId];
             hiddenUsers.delete(userId);
 
-            // Broadcast new list
+            // Broadcast updated list
             await emitOnlineUsers();
         }
     });

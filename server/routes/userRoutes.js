@@ -16,6 +16,7 @@ import {
     toggleMuteUser,
     updatePrivacySettings,
     updateNotificationSettings,
+    saveFcmToken
 } from "../controllers/userController.js";
 
 const userRouter = express.Router();
@@ -30,6 +31,12 @@ const userRouter = express.Router();
  * @middleware verifyToken (Allows users not yet in DB to access this)
  */
 userRouter.post("/sync", verifyToken, syncUser);
+
+/**
+ * @route POST /api/user/fcm-token
+ * @desc Save FCM Token for Push Notifications
+ */
+userRouter.post("/fcm-token", protect, saveFcmToken);
 
 // =========================================================
 // 2. Current User Profile Management

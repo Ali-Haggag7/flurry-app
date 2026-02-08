@@ -19,7 +19,7 @@ const ConnectionsSkeleton = () => {
                     className="relative bg-surface border border-adaptive rounded-2xl p-4 flex flex-col gap-4 overflow-hidden shadow-sm"
                 >
                     {/* Shimmer Effect */}
-                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/5 to-transparent z-10 pointer-events-none" />
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-linear-to-r from-transparent via-white/5 to-transparent z-10 pointer-events-none" />
 
                     <div className="flex items-start gap-4">
                         {/* Avatar */}

@@ -12,6 +12,7 @@ import { useAuth } from "@clerk/clerk-react";
 import { Menu, Bell, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next"; // 🟢 Import translation hook
 
 // --- Local Imports ---
 import Sidebar from "../layouts/Sidebar";
@@ -31,6 +32,7 @@ const Layout = () => {
     const dispatch = useDispatch();
     const { getToken } = useAuth();
     const { socket } = useSocketContext();
+    const { t } = useTranslation(); // 🟢 Hook initialization for Toasts
 
     // --- Router Hooks ---
     const navigate = useNavigate();
@@ -48,17 +50,17 @@ const Layout = () => {
      * Smart Route Detection to toggle header/sidebar states.
      * Memoized to prevent recalculation on unrelated re-renders.
      */
-    const { isFeedPage, isChatPage } = useMemo(() => {
+    const { isFeedPage, isChatPage, isPostPage, isNetworkPage } = useMemo(() => {
         const path = location.pathname;
 
-        // حدد هنا المسار بتاع صفحة الـ available اللي في الصورة عشان نستثنيها
-        // افترضت هنا إن المسار هو "/groups" أو "/groups/discover"
+        // Path for discovery pages to exclude from chat logic
         const isGroupsDiscovery = path === "/groups" || path === "/groups/available";
 
         return {
             isFeedPage: path === "/",
-            // التعديل هنا: بنقوله لو دي صفحة جروبات بس مش صفحة الاستكشاف، يبقى دي صفحة شات
-            isChatPage: path.startsWith("/messages/") || (path.startsWith("/groups/") && !isGroupsDiscovery)
+            isChatPage: path.startsWith("/messages/") || (path.startsWith("/groups/") && !isGroupsDiscovery),
+            isPostPage: path.startsWith("/post/"),
+            isNetworkPage: path.startsWith("/profile/")
         };
     }, [location.pathname]);
 
@@ -123,12 +125,14 @@ const Layout = () => {
             if (["connection_request", "follow_request"].includes(notification.type)) {
                 setNetworkCount(prev => prev + 1);
                 const toastId = `req-${notification._id}`;
-                toast(`New Request from ${notification.sender?.full_name || "Someone"}`, { icon: '👋', id: toastId });
+                // 🟢 Translated Toast with dynamic values
+                toast(t("layout.toast.newRequest", { name: notification.sender?.full_name || t("layout.toast.someone") }), { icon: '👋', id: toastId });
             } else {
                 setUnreadCount(prev => prev + 1);
                 // Prevent toast if user is already chatting with sender
                 const toastId = `notif-${notification._id}`;
-                toast(`New notification from ${notification.sender?.full_name}`, { icon: '🔔', id: toastId });
+                // 🟢 Translated Toast with dynamic values
+                toast(t("layout.toast.newNotification", { name: notification.sender?.full_name }), { icon: '🔔', id: toastId });
             }
 
             // Play Sound
@@ -140,7 +144,7 @@ const Layout = () => {
 
         // Cleanup listener
         return () => socket.off("newNotification", handleNewNotification);
-    }, [socket, currentUser]);
+    }, [socket, currentUser, t]); // 🟢 Added 't' to dependencies
 
     // 3. Polling (Background Sync)
     useEffect(() => {
@@ -191,22 +195,27 @@ const Layout = () => {
                         handleBellClick={handleBellClick}
                         handleMenuClick={handleMenuClick}
                         unreadCount={unreadCount}
+                        t={t} // 🟢 Pass t function
                     />
                 ) : (
-                    <SecondaryHeader
-                        handleLogoClick={() => navigate('/')}
-                        handleBellClick={handleBellClick}
-                        handleMenuClick={handleMenuClick}
-                        unreadCount={unreadCount}
-                    />
+                    <div className={isPostPage || isNetworkPage ? "hidden md:block" : "block"}>
+                        <SecondaryHeader
+                            handleLogoClick={() => navigate('/')}
+                            handleBellClick={handleBellClick}
+                            handleMenuClick={handleMenuClick}
+                            unreadCount={unreadCount}
+                            t={t} // 🟢 Pass t function
+                        />
+                    </div>
                 )
             )}
 
             {/* Main Content Area */}
             <main className={`
-                w-full lg:w-[calc(100%-80px)] lg:ml-20 transition-all duration-300
+                w-full lg:w-[calc(100%-80px)] lg:ms-20 transition-all duration-300
                 ${isChatPage ? "h-screen overflow-hidden" : "min-h-screen"}
             `}>
+                {/* 🔵 Note: lg:ms-20 ensures margin-start (right in RTL) */}
                 <Outlet context={{ setSidebarOpen, sidebarOpen, feedType }} />
             </main>
 
@@ -222,12 +231,12 @@ const Layout = () => {
  */
 const FeedHeader = React.memo(({
     isScrolled, handleLogoClick, feedType, setFeedType,
-    navigate, handleBellClick, handleMenuClick, unreadCount
+    navigate, handleBellClick, handleMenuClick, unreadCount, t // 🟢 Receive t
 }) => {
     return (
         <header
             className={`
-                fixed top-0 left-0 w-full lg:left-20 lg:w-[calc(100%-80px)] z-40 
+                fixed top-0 start-0 w-full lg:start-20 lg:w-[calc(100%-80px)] z-40 
                 h-[60px] px-3 sm:px-4 transition-all duration-300 ease-in-out 
                 flex items-center justify-between
                 ${isScrolled
@@ -251,11 +260,11 @@ const FeedHeader = React.memo(({
                             ${feedType === type ? "text-content" : "text-muted hover:text-content/70"}
                         `}
                     >
-                        {type === "for-you" ? "For You" : "Following"}
+                        {type === "for-you" ? t("feed.forYou") : t("feed.following")}
                         {feedType === type && (
                             <motion.div
                                 layoutId="headerTab"
-                                className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-full"
+                                className="absolute bottom-0 start-0 end-0 h-[3px] bg-primary rounded-t-full"
                             />
                         )}
                     </button>
@@ -266,17 +275,17 @@ const FeedHeader = React.memo(({
             <div className="flex items-center justify-end gap-1 sm:gap-2 shrink-0 z-20">
                 <button
                     onClick={() => navigate('/search')}
-                    aria-label="Search"
+                    aria-label={t("layout.aria.search")} // 🟢 Translated Aria
                     className="hidden sm:block p-2 rounded-full hover:bg-main text-content transition-colors active:scale-95"
                 >
                     <Search size={22} />
                 </button>
 
-                <NotificationIcon unreadCount={unreadCount} onClick={handleBellClick} />
+                <NotificationIcon unreadCount={unreadCount} onClick={handleBellClick} t={t} /> {/* 🟢 Pass t */}
 
                 <button
                     onClick={handleMenuClick}
-                    aria-label="Menu"
+                    aria-label={t("layout.aria.menu")} // 🟢 Translated Aria
                     className="lg:hidden p-2 rounded-full hover:bg-main text-content transition-colors active:scale-95"
                 >
                     <Menu size={24} className="sm:w-[26px] sm:h-[26px]" />
@@ -291,7 +300,7 @@ const FeedHeader = React.memo(({
  * Simpler version without tabs.
  */
 const SecondaryHeader = React.memo(({
-    handleLogoClick, handleBellClick, handleMenuClick, unreadCount
+    handleLogoClick, handleBellClick, handleMenuClick, unreadCount, t // 🟢 Receive t
 }) => {
     return (
         <header className="lg:hidden sticky top-0 w-full h-[60px] z-40 px-4 flex items-center justify-between bg-surface/90 backdrop-blur-xl border-b border-adaptive transition-all">
@@ -299,11 +308,11 @@ const SecondaryHeader = React.memo(({
                 <Logo onClick={handleLogoClick} />
             </div>
             <div className="flex items-center gap-2">
-                <NotificationIcon unreadCount={unreadCount} onClick={handleBellClick} />
+                <NotificationIcon unreadCount={unreadCount} onClick={handleBellClick} t={t} /> {/* 🟢 Pass t */}
 
                 <button
                     onClick={handleMenuClick}
-                    aria-label="Menu"
+                    aria-label={t("layout.aria.menu")} // 🟢 Translated Aria
                     className="p-2 rounded-full hover:bg-main text-content transition-colors active:scale-95"
                 >
                     <Menu size={24} className="sm:w-[26px] sm:h-[26px]" />
@@ -316,10 +325,10 @@ const SecondaryHeader = React.memo(({
 /**
  * Reusable Notification Bell with Badge.
  */
-const NotificationIcon = ({ unreadCount, onClick }) => (
+const NotificationIcon = ({ unreadCount, onClick, t }) => ( // 🟢 Receive t
     <button
         onClick={onClick}
-        aria-label="Notifications"
+        aria-label={t("layout.aria.notifications")} // 🟢 Translated Aria
         className="relative p-2 rounded-full hover:bg-main transition-colors group active:scale-90"
     >
         <Bell
@@ -330,7 +339,7 @@ const NotificationIcon = ({ unreadCount, onClick }) => (
             `}
         />
         {unreadCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 flex h-3.5 w-3.5 sm:h-4 sm:w-4 pointer-events-none">
+            <span className="absolute top-1.5 end-1.5 flex h-3.5 w-3.5 sm:h-4 sm:w-4 pointer-events-none">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-full w-full bg-red-600 text-[9px] sm:text-[10px] font-bold text-white items-center justify-center border-2 border-surface shadow-sm">
                     {unreadCount > 9 ? "9+" : unreadCount}

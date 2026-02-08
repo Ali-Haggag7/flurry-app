@@ -3,11 +3,6 @@
  * ------------------------------------------------------------------
  * A production-grade component for creating posts with text and media.
  * Features drag-and-drop, lazy-loaded emoji picker, and optimized image handling.
- * * @architectural_notes
- * - Uses React.memo and useCallback to prevent unnecessary re-renders.
- * - Implements strict cleanup for ObjectURLs to prevent memory leaks.
- * - Utilizes framer-motion for layout transitions.
- * - Adheres to strict theme tokens (bg-main, bg-surface, border-adaptive).
  */
 
 import React, { useState, useEffect, useRef, useCallback, memo, lazy, Suspense } from "react";
@@ -16,6 +11,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next"; // 🟢
 
 // --- Third Party Icons ---
 import { Image, Smile, X, Loader2, UploadCloud, PenTool } from "lucide-react";
@@ -36,8 +32,6 @@ const EmojiPicker = lazy(() => import('emoji-picker-react'));
 
 /**
  * 1. Single Image Preview Component
- * Handles URL creation/revocation internally to prevent memory leaks 
- * and avoid re-generating URLs on every parent render.
  */
 const PreviewImage = memo(({ file, onRemove, index }) => {
     const [previewUrl, setPreviewUrl] = useState(null);
@@ -46,8 +40,6 @@ const PreviewImage = memo(({ file, onRemove, index }) => {
         if (!file) return;
         const url = URL.createObjectURL(file);
         setPreviewUrl(url);
-
-        // Strict Cleanup
         return () => URL.revokeObjectURL(url);
     }, [file]);
 
@@ -69,7 +61,7 @@ const PreviewImage = memo(({ file, onRemove, index }) => {
             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
             <button
                 onClick={() => onRemove(index)}
-                className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all transform hover:scale-110 shadow-lg"
+                className="absolute top-2 end-2 bg-red-500 hover:bg-red-600 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all transform hover:scale-110 shadow-lg" // 🔵 end-2
                 type="button"
             >
                 <X size={14} />
@@ -80,7 +72,6 @@ const PreviewImage = memo(({ file, onRemove, index }) => {
 
 /**
  * 2. Image Previews Grid 
- * Memoized to prevent re-renders when typing text.
  */
 const ImagePreviewList = memo(({ images, onRemove }) => {
     if (images.length === 0) return null;
@@ -106,9 +97,8 @@ const ImagePreviewList = memo(({ images, onRemove }) => {
 
 /**
  * 3. User Info Section
- * Static presentation component.
  */
-const UserInfoSection = memo(({ user, isLoading }) => {
+const UserInfoSection = memo(({ user, isLoading, t }) => { // 🟢 Receive t
     if (isLoading && !user) {
         return (
             <div className="flex items-center gap-4 mb-6">
@@ -125,7 +115,7 @@ const UserInfoSection = memo(({ user, isLoading }) => {
         <div className="flex items-center gap-4 mb-6">
             <UserAvatar user={user} className="w-12 h-12 border rounded-full border-adaptive shadow-md" />
             <div>
-                <h3 className="font-bold text-content text-lg">{user?.full_name || "Guest User"}</h3>
+                <h3 className="font-bold text-content text-lg">{user?.full_name || t("stories.defaultUser")}</h3> {/* 🟢 */}
                 <p className="text-xs text-muted font-medium">@{user?.username || "username"}</p>
             </div>
         </div>
@@ -143,10 +133,11 @@ const CreatePost = () => {
     const { getToken } = useAuth();
     const { currentUser, status } = useSelector((state) => state.user);
     const fileInputRef = useRef(null);
+    const { t } = useTranslation(); // 🟢
 
     // --- Local State ---
     const [content, setContent] = useState("");
-    const [images, setImages] = useState([]); // Stores File objects
+    const [images, setImages] = useState([]);
     const [loading, setLoading] = useState(false);
     const [showEmoji, setShowEmoji] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
@@ -177,7 +168,6 @@ const CreatePost = () => {
             const filesArray = Array.from(e.target.files);
             setImages((prev) => [...prev, ...filesArray]);
         }
-        // Reset input to allow selecting same file again if needed
         if (e.target) e.target.value = '';
     }, []);
 
@@ -192,7 +182,6 @@ const CreatePost = () => {
     }, []);
 
     const handleDragLeave = useCallback((e) => {
-        // Prevent flickering when dragging over child elements
         if (e.currentTarget.contains(e.relatedTarget)) return;
         setIsDragging(false);
     }, []);
@@ -209,7 +198,7 @@ const CreatePost = () => {
     // Submission Handler
     const handleSubmit = async () => {
         if (content.trim() === "" && images.length === 0) {
-            toast.error("Please add content or images 📸");
+            toast.error(t("createPost.emptyError")); // 🟢
             return;
         }
 
@@ -232,12 +221,12 @@ const CreatePost = () => {
         };
 
         toast.promise(publishPromise(), {
-            loading: 'Publishing your masterpiece... 🎨',
+            loading: t("createPost.publishing"), // 🟢
             success: () => {
                 navigate("/");
-                return "Published successfully! 🚀";
+                return t("createPost.success"); // 🟢
             },
-            error: 'Failed to publish. Please try again.',
+            error: t("createPost.error"), // 🟢
         }).finally(() => {
             setLoading(false);
         });
@@ -251,13 +240,13 @@ const CreatePost = () => {
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="mb-8 text-center md:text-left"
+                    className="mb-8 text-center md:text-start" // 🔵 text-start
                 >
                     <h1 className="text-3xl md:text-4xl font-extrabold text-content flex items-center justify-center md:justify-start gap-3">
-                        Create Post
+                        {t("createPost.title")} {/* 🟢 */}
                         <PenTool className="text-primary w-8 h-8 md:w-10 md:h-10 animate-bounce" />
                     </h1>
-                    <p className="text-muted mt-2 font-medium">Share your thoughts, ideas, and moments with the world.</p>
+                    <p className="text-muted mt-2 font-medium">{t("createPost.subtitle")}</p> {/* 🟢 */}
                 </motion.div>
 
                 {/* Content Card */}
@@ -267,12 +256,12 @@ const CreatePost = () => {
                     className="bg-surface/80 backdrop-blur-xl border border-adaptive rounded-3xl p-6 shadow-xl relative overflow-hidden"
                 >
                     {/* User Info */}
-                    <UserInfoSection user={currentUser} isLoading={status === "loading"} />
+                    <UserInfoSection user={currentUser} isLoading={status === "loading"} t={t} /> {/* 🟢 Pass t */}
 
                     {/* Text Area */}
                     <textarea
                         className="w-full min-h-[150px] bg-transparent text-lg text-content placeholder-muted/60 outline-none resize-none p-2 leading-relaxed"
-                        placeholder="What's happening?"
+                        placeholder={t("createPost.placeholder")} // 🟢
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
                         disabled={loading}
@@ -309,7 +298,7 @@ const CreatePost = () => {
                             <UploadCloud className={`w-8 h-8 transition-colors ${isDragging ? "text-primary" : "text-muted group-hover:text-primary"}`} />
                         </div>
                         <p className="text-sm text-muted font-bold group-hover:text-content transition-colors z-10">
-                            {isDragging ? "Drop images here!" : "Click or drag images to upload"}
+                            {isDragging ? t("createPost.dropHere") : t("createPost.uploadText")} {/* 🟢 */}
                         </p>
                     </div>
 
@@ -320,7 +309,7 @@ const CreatePost = () => {
                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 className="p-2.5 text-primary hover:bg-primary/10 rounded-xl transition-colors border border-transparent hover:border-primary/20"
-                                title="Add Images"
+                                title={t("createPost.addImage")} // 🟢
                                 type="button"
                                 disabled={loading}
                             >
@@ -332,7 +321,7 @@ const CreatePost = () => {
                                 <button
                                     onClick={() => setShowEmoji(!showEmoji)}
                                     className="p-2.5 text-yellow-500 hover:bg-yellow-500/10 rounded-xl transition-colors border border-transparent hover:border-yellow-500/20"
-                                    title="Add Emoji"
+                                    title={t("createPost.addEmoji")} // 🟢
                                     type="button"
                                     disabled={loading}
                                 >
@@ -345,7 +334,7 @@ const CreatePost = () => {
                                             initial={{ opacity: 0, scale: 0.9, y: 10 }}
                                             animate={{ opacity: 1, scale: 1, y: 0 }}
                                             exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                                            className="absolute top-full left-0 mt-3 z-50 shadow-2xl rounded-2xl overflow-hidden border border-adaptive"
+                                            className="absolute top-full start-0 mt-3 z-50 shadow-2xl rounded-2xl overflow-hidden border border-adaptive" // 🔵 start-0
                                         >
                                             <div onClick={() => setShowEmoji(false)} className="fixed inset-0 z-40" />
                                             <div className="relative z-50">
@@ -364,15 +353,15 @@ const CreatePost = () => {
                                                         width={300}
                                                         height={350}
                                                         style={{
-                                                            "--epr-bg-color": "rgb(var(--color-surface))",
-                                                            "--epr-category-label-bg-color": "rgb(var(--color-main))",
-                                                            "--epr-text-color": "rgb(var(--color-content))",
-                                                            "--epr-search-border-color": "rgb(var(--color-border))",
-                                                            "--epr-search-input-bg-color": "rgb(var(--color-main))",
-                                                            "--epr-hover-bg-color": "rgba(var(--color-primary), 0.2)",
-                                                            "--epr-focus-bg-color": "rgba(var(--color-primary), 0.4)",
-                                                            "--epr-horizontal-padding": "10px",
-                                                            "--epr-picker-border-radius": "16px",
+                                                            "--epe-bg-color": "rgb(var(--color-surface))",
+                                                            "--epe-category-label-bg-color": "rgb(var(--color-main))",
+                                                            "--epe-text-color": "rgb(var(--color-content))",
+                                                            "--epe-search-border-color": "rgb(var(--color-border))",
+                                                            "--epe-search-input-bg-color": "rgb(var(--color-main))",
+                                                            "--epe-hover-bg-color": "rgba(var(--color-primary), 0.2)",
+                                                            "--epe-focus-bg-color": "rgba(var(--color-primary), 0.4)",
+                                                            "--epe-horizontal-padding": "10px",
+                                                            "--epe-picker-border-eadius": "16px",
                                                             border: "none"
                                                         }}
                                                     />
@@ -395,7 +384,7 @@ const CreatePost = () => {
                                 className="bg-primary hover:opacity-90 text-white font-bold py-2.5 px-8 rounded-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-primary/25"
                                 type="button"
                             >
-                                {loading ? <Loader2 size={20} className="animate-spin" /> : "Post"}
+                                {loading ? <Loader2 size={20} className="animate-spin" /> : t("createPost.postBtn")} {/* 🟢 */}
                             </button>
                         </div>
                     </div>

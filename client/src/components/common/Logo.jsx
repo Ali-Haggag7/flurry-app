@@ -55,6 +55,8 @@ const Logo = ({ onClick, className, showText = true }) => {
                     <span
                         className="text-2xl font-black tracking-tight bg-clip-text text-transparent transition-all duration-300 leading-none"
                         style={{
+                            // 🔵 Gradient direction is usually kept LTR for brand names even in RTL layouts
+                            // unless you want the gradient to flip.
                             backgroundImage: 'linear-gradient(to right, var(--color-primary), var(--color-content))'
                         }}
                     >

@@ -6,6 +6,7 @@ import {
     Home, Search, MessageCircle, User, Settings,
     CirclePlus, LogOut, Users, Layers, Compass, X
 } from 'lucide-react';
+import { useTranslation } from "react-i18next";
 
 // --- Local Imports ---
 import Logo from '../components/common/Logo';
@@ -22,20 +23,21 @@ import Footer from '../components/common/Footer';
 const Sidebar = React.memo(({ sidebarOpen, setSidebarOpen, networkCount }) => {
     const location = useLocation();
     const { signOut } = useClerk();
+    const { t } = useTranslation();
 
     // --- Data ---
 
     // Memoized navigation config to prevent recreation on every render
     const NAV_ITEMS = useMemo(() => [
-        { icon: Home, path: "/", label: "Home" },
-        { icon: Search, path: "/search", label: "Search" },
-        { icon: MessageCircle, path: "/messages", label: "Messages" },
-        { icon: User, path: "/profile", label: "Profile" },
-        { icon: Users, path: "/connections", label: "Connections" },
-        { icon: Layers, path: "/groups", label: "My Groups" },
-        { icon: Compass, path: "/groups/available", label: "Explore" },
-        { icon: Settings, path: "/settings", label: "Settings" },
-    ], []);
+        { icon: Home, path: "/", label: t("sidebar.home") },
+        { icon: Search, path: "/search", label: t("sidebar.search") },
+        { icon: MessageCircle, path: "/messages", label: t("sidebar.messages") },
+        { icon: User, path: "/profile", label: t("sidebar.profile") },
+        { icon: Users, path: "/connections", label: t("sidebar.connections") },
+        { icon: Layers, path: "/groups", label: t("sidebar.groups") },
+        { icon: Compass, path: "/groups/available", label: t("sidebar.explore") },
+        { icon: Settings, path: "/settings", label: t("sidebar.settings") },
+    ], [t]);
 
     // --- Handlers ---
 
@@ -67,10 +69,10 @@ const Sidebar = React.memo(({ sidebarOpen, setSidebarOpen, networkCount }) => {
             {/* Sidebar Container */}
             <aside
                 className={`
-                    fixed top-0 left-0 h-full w-72 lg:w-20 flex flex-col py-4 gap-4 
-                    bg-surface border-r border-adaptive shadow-2xl z-50
+                    fixed top-0 start-0 h-full w-72 lg:w-20 flex flex-col py-4 gap-4 
+                    bg-surface border-e border-adaptive shadow-2xl z-50
                     transition-transform duration-300 ease-out
-                    ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+                    ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0 rtl:translate-x-full lg:rtl:translate-x-0'}
                 `}
             >
                 {/* 1. Mobile Header */}
@@ -80,7 +82,7 @@ const Sidebar = React.memo(({ sidebarOpen, setSidebarOpen, networkCount }) => {
                             <Logo />
                         </div>
                         <span
-                            className="text-2xl font-black tracking-tight bg-clip-text text-transparent leading-none ml-1"
+                            className="text-2xl font-black tracking-tight bg-clip-text text-transparent leading-none ms-1"
                             style={{
                                 backgroundImage: 'linear-gradient(to right, var(--color-primary), var(--color-content))'
                             }}
@@ -92,7 +94,7 @@ const Sidebar = React.memo(({ sidebarOpen, setSidebarOpen, networkCount }) => {
                     <button
                         onClick={handleClose}
                         className="p-2 rounded-full hover:bg-main text-muted transition-colors"
-                        aria-label="Close Sidebar"
+                        aria-label={t("sidebar.close")}
                     >
                         <X size={24} />
                     </button>
@@ -124,13 +126,14 @@ const Sidebar = React.memo(({ sidebarOpen, setSidebarOpen, networkCount }) => {
                         to="/create-post"
                         onClick={handleClose}
                         className="relative group"
+                        title={t("sidebar.createPost")}
                     >
                         <motion.div
                             whileHover={{ scale: 1.1, rotate: 90 }}
                             whileTap={{ scale: 0.95 }}
                             className="flex items-center justify-center w-12 h-12 lg:w-10 lg:h-10 rounded-full bg-primary text-white shadow-lg shadow-primary/30"
                         >
-                            <CirclePlus size={24} className="lg:w-[22px] lg:h-[22px]" />
+                            <CirclePlus size={24} className="lg:w-5.5 lg:h-5.5" />
                         </motion.div>
                     </Link>
 
@@ -153,7 +156,7 @@ const Sidebar = React.memo(({ sidebarOpen, setSidebarOpen, networkCount }) => {
                         whileTap={{ scale: 0.95 }}
                         onClick={() => signOut()}
                         className="text-muted hover:text-red-500 p-3 lg:p-2 rounded-xl hover:bg-red-500/10 transition-colors"
-                        title="Logout"
+                        title={t("sidebar.logout")}
                     >
                         <LogOut size={24} className="lg:w-5 lg:h-5" />
                     </motion.button>
@@ -171,7 +174,7 @@ const Sidebar = React.memo(({ sidebarOpen, setSidebarOpen, networkCount }) => {
  */
 const NavItem = React.memo(({ item, isActive, networkCount, onClick }) => {
     const Icon = item.icon;
-    const showBadge = item.label === "Connections" && networkCount > 0;
+    const showBadge = (item.label === "Connections" || item.label === "الشبكة") && networkCount > 0;
 
     return (
         <Link
@@ -192,7 +195,7 @@ const NavItem = React.memo(({ item, isActive, networkCount, onClick }) => {
 
                 {/* Red Notification Dot */}
                 {showBadge && (
-                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-surface animate-pulse" />
+                    <span className="absolute -top-1 -end-1 w-3 h-3 bg-red-500 rounded-full border-2 border-surface animate-pulse" />
                 )}
             </div>
 
@@ -202,14 +205,14 @@ const NavItem = React.memo(({ item, isActive, networkCount, onClick }) => {
 
             {/* Mobile Badge Number */}
             {showBadge && (
-                <span className="lg:hidden bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold ml-auto">
+                <span className="lg:hidden bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold ms-auto">
                     {networkCount}
                 </span>
             )}
 
             {/* Desktop Active Indicator */}
             {!isActive && (
-                <span className="hidden lg:block absolute left-0 w-1 h-0 rounded-r-full bg-primary transition-all duration-300 group-hover:h-2/3 opacity-0 group-hover:opacity-100" />
+                <span className="hidden lg:block absolute start-0 w-1 h-0 rounded-e-full bg-primary transition-all duration-300 group-hover:h-2/3 opacity-0 group-hover:opacity-100" />
             )}
         </Link>
     );

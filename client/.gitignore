@@ -1,4 +1,6 @@
-# Logs
+# ---------------------------------
+# 🛑 Logs & Diagnostics
+# ---------------------------------
 logs
 *.log
 npm-debug.log*
@@ -7,22 +9,42 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Dependencies
+# ---------------------------------
+# 📦 Dependencies
+# ---------------------------------
 node_modules
+/node_modules
+.pnp
+.pnp.js
 
-# Build Output
+# ---------------------------------
+# 🚀 Build Output
+# ---------------------------------
 dist
 dist-ssr
-
-# Environment Variables
-.env
-.env.local
 *.local
 
-# Analytics
-stats.html
+# ---------------------------------
+# 🛑 Environment Variables
+# ---------------------------------
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+*.env.*
 
-# Editor directories and files
+# ---------------------------------
+# 🧪 Testing (Cypress generated files)
+# ---------------------------------
+/cypress/videos
+/cypress/screenshots
+coverage
+
+# ---------------------------------
+# ⚙️ Editor & System Files
+# ---------------------------------
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -32,3 +54,13 @@ stats.html
 *.njsproj
 *.sln
 *.sw?
+
+# 🤖 AI Editor Files
+.cursor/
+.cursorrules
+.windsurf/
+
+# ---------------------------------
+# ☁️ Vercel )
+# ---------------------------------
+.vercel

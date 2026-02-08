@@ -4,6 +4,7 @@ import imagekit from "../configs/imagekit.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 import { getReceiverSocketId, io } from "../socket/socket.js";
+import { sendPushNotification } from "../utils/sendNotification.js";
 
 /**
  * @file messageController.js
@@ -131,7 +132,6 @@ export const sendMessage = expressAsyncHandler(async (req, res) => {
     }
 
     // 4. Connection Requirement Check
-    // Ensure we cast to string for accurate comparison
     const isConnected = senderUser.connections.some(
         (id) => id.toString() === finalReceiverId.toString()
     );
@@ -166,10 +166,9 @@ export const sendMessage = expressAsyncHandler(async (req, res) => {
                 mediaUrl = url;
             }
         } catch (uploadError) {
+            console.error("❌ ImageKit Upload Error:", uploadError);
             res.status(500);
-            console.error("❌ ImageKit Upload Error:", uploadError); // ضيف السطر ده ضروري
-    res.status(500);
-    throw new Error(`Media upload failed: ${uploadError.message}`);
+            throw new Error(`Media upload failed: ${uploadError.message}`);
         }
     } else if (sharedPostId) {
         messageType = "shared_post";
@@ -208,6 +207,28 @@ export const sendMessage = expressAsyncHandler(async (req, res) => {
         }
     }
 
+    // 🔥🔥🔥 9. Push Notification Logic (New Addition) 🔥🔥🔥
+    try {
+        let notificationBody = text;
+        if (messageType === 'image') notificationBody = "📷 Sent a photo";
+        if (messageType === 'audio') notificationBody = "🎤 Sent a voice message";
+        if (messageType === 'shared_post') notificationBody = "🔗 Shared a post";
+        if (messageType === 'story_reply') notificationBody = "📝 Replied to a story";
+
+        await sendPushNotification(
+            finalReceiverId,
+            senderUser.full_name,
+            notificationBody || "New message",
+            {
+                type: "chat",
+                chatId: senderMongoId.toString(),
+                senderId: senderMongoId.toString()
+            }
+        );
+    } catch (error) {
+        console.error("⚠️ Failed to send push notification:", error);
+    }
+
     res.status(201).json({ success: true, data: newMessage });
 });
 
@@ -219,6 +240,11 @@ export const sendMessage = expressAsyncHandler(async (req, res) => {
 export const getChatMessages = expressAsyncHandler(async (req, res) => {
     const { userId: clerkId } = req.auth();
     const { withUserId } = req.params;
+
+    // 🟢 Pagination Parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20; // Default 20 messages per chunk
+    const skip = (page - 1) * limit;
 
     // 1. Resolve Current User
     const user = await User.findOne({ clerkId });
@@ -236,12 +262,13 @@ export const getChatMessages = expressAsyncHandler(async (req, res) => {
             partnerId = partner._id;
         } else {
             // Graceful fallback for invalid/non-existent users
-            return res.status(200).json({ success: true, data: [] });
+            return res.status(200).json({ success: true, data: [], hasMore: false });
         }
     }
 
     // 3. Query Messages
     // Logic: (Sender=Me & Receiver=Partner) OR (Sender=Partner & Receiver=Me) AND Not Deleted
+    // 🟢 Updated: Sort by -1 (Newest first) for pagination, then reverse back
     const messages = await Message.find({
         $and: [
             {
@@ -253,29 +280,35 @@ export const getChatMessages = expressAsyncHandler(async (req, res) => {
             { deletedBy: { $ne: myId } },
         ],
     })
-        .sort({ createdAt: 1 }) // Chronological order
+        .sort({ createdAt: -1 }) // 🟢 Fetch newest first
+        .skip(skip)
+        .limit(limit)
         .populate(FULL_MESSAGE_POPULATE)
         .lean(); // Convert to plain JS objects for performance
 
+    // 🟢 Re-order to chronological (Oldest -> Newest) for frontend display
+    const sortedMessages = messages.reverse();
+
     // 4. Mark Messages as Read (Batch Update)
-    const unreadMessages = messages.some(
-        (msg) => msg.sender.toString() === partnerId.toString() && !msg.read
+    // We explicitly mark ALL unread messages from this partner as read, not just the fetched chunk
+    // to ensure notification badges clear correctly.
+    await Message.updateMany(
+        { sender: partnerId, receiver: myId, read: false },
+        { $set: { read: true } }
     );
 
-    if (unreadMessages) {
-        await Message.updateMany(
-            { sender: partnerId, receiver: myId, read: false },
-            { $set: { read: true } }
-        );
-
-        // Notify partner that I have seen their messages
-        const partnerSocketId = getReceiverSocketId(partnerId.toString());
-        if (partnerSocketId) {
-            io.to(partnerSocketId).emit("messagesSeen", { byUserId: myId });
-        }
+    // Notify partner that I have seen their messages
+    // (We emit this regardless of whether we updated rows, to be safe/real-time)
+    const partnerSocketId = getReceiverSocketId(partnerId.toString());
+    if (partnerSocketId) {
+        io.to(partnerSocketId).emit("messagesSeen", { byUserId: myId });
     }
 
-    res.status(200).json({ success: true, data: messages });
+    res.status(200).json({
+        success: true,
+        data: sortedMessages,
+        hasMore: messages.length === limit // 🟢 Flag for frontend to know if more exist
+    });
 });
 
 /**
@@ -508,4 +541,126 @@ export const reactToMessage = expressAsyncHandler(async (req, res) => {
     }
 
     res.status(200).json({ success: true, reactions: message.reactions });
+});
+
+/**
+ * @desc    Delete a specific message (Soft Delete)
+ * @route   DELETE /api/message/:id
+ * @access  Private
+ */
+export const deleteMessage = expressAsyncHandler(async (req, res) => {
+    const { id: messageId } = req.params;
+    const { userId: clerkId } = req.auth();
+
+    try {
+        // 1. Check User
+        const user = await User.findOne({ clerkId });
+        if (!user) {
+            res.status(404);
+            throw new Error("User not found");
+        }
+
+        // 2. Find Message
+        const message = await Message.findById(messageId);
+        if (!message) {
+            res.status(404);
+            throw new Error("Message not found");
+        }
+
+        // 3. Ownership Check
+        if (message.sender.toString() !== user._id.toString()) {
+            res.status(401);
+            throw new Error("Not authorized to delete this message");
+        }
+
+        // 4. Soft Delete (Update DB)
+        message.text = "";
+        message.media_url = null;
+        message.isDeleted = true;
+
+        await message.save(); // 💾 Save changes to Database
+
+        // 5. Socket Notification (Isolated Block)
+        try {
+            if (message.receiver) {
+                // Check if functions are imported correctly
+                if (typeof getReceiverSocketId === 'function' && typeof io !== 'undefined') {
+                    const receiverSocketId = getReceiverSocketId(message.receiver.toString());
+                    if (receiverSocketId) {
+                        io.to(receiverSocketId).emit("messageDeleted", { messageId });
+                    }
+                } else {
+                    console.warn("⚠️ Socket.io is not initialized properly in deleteMessage controller.");
+                }
+            }
+        } catch (socketError) {
+            // Log error internally but don't fail the request
+            console.error("⚠️ Socket Notification Failed:", socketError.message);
+        }
+
+        // 6. Send Success Response
+        res.status(200).json({ success: true, message: "Message deleted successfully" });
+
+    } catch (error) {
+        console.error("🔥 Delete Controller Error:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+/**
+ * @desc    Edit a specific message
+ * @route   PUT /api/message/:id
+ * @access  Private
+ */
+export const editMessage = expressAsyncHandler(async (req, res) => {
+    const { id: messageId } = req.params;
+    const { text } = req.body;
+    const { userId: clerkId } = req.auth();
+
+    if (!text || !text.trim()) {
+        res.status(400);
+        throw new Error("Text content is required for editing");
+    }
+
+    // 1. Find User
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+        res.status(404);
+        throw new Error("User not found");
+    }
+
+    // 2. Find Message
+    const message = await Message.findById(messageId);
+    if (!message) {
+        res.status(404);
+        throw new Error("Message not found");
+    }
+
+    // 3. Check Ownership & Restrictions
+    if (message.sender.toString() !== user._id.toString()) {
+        res.status(401);
+        throw new Error("Not authorized to edit this message");
+    }
+
+    if (message.isDeleted) {
+        res.status(400);
+        throw new Error("Cannot edit a deleted message");
+    }
+
+    // 4. Update Message
+    message.text = text;
+    message.isEdited = true; // Add this field to schema if needed for UI tag
+    await message.save();
+
+    // 5. Real-time Notification
+    const receiverSocketId = getReceiverSocketId(message.receiver.toString());
+    if (receiverSocketId) {
+        io.to(receiverSocketId).emit("messageUpdated", {
+            messageId,
+            newText: text,
+            isEdited: true
+        });
+    }
+
+    res.status(200).json({ success: true, data: message });
 });

@@ -25,6 +25,7 @@ const Loading = ({ height = "100vh", transparent = false }) => {
                 <div className="w-full h-full rounded-full border-4 border-transparent border-t-primary border-b-primary/30 animate-spin" />
 
                 {/* 💫 Core Glow */}
+                {/* 🛠️ FIX: Use 'left-1/2' instead of 'start-1/2' to force physical centering in RTL & LTR */}
                 <div className="absolute top-1/2 left-1/2 w-4 h-4 -translate-x-1/2 -translate-y-1/2 bg-primary rounded-full animate-pulse shadow-[0_0_20px_var(--color-primary)]" />
             </div>
         </div>

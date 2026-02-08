@@ -1,0 +1,628 @@
+{
+    "sidebar": {
+        "home": "Home",
+        "search": "Search",
+        "messages": "Messages",
+        "profile": "Profile",
+        "connections": "Connections",
+        "groups": "My Groups",
+        "explore": "Explore",
+        "settings": "Settings",
+        "logout": "Logout",
+        "close": "Close Sidebar",
+        "createPost": "Create Post"
+    },
+    "settings": {
+        "header": {
+            "title": "Settings",
+            "subtitle": "Customize your experience and manage your account."
+        },
+        "tabs": {
+            "general": "General",
+            "privacy": "Privacy",
+            "appearance": "Appearance",
+            "notifications": "Notifications",
+            "language": "Language",
+            "danger": "Danger Zone"
+        },
+        "general": {
+            "title": "General Profile",
+            "fullName": "Full Name",
+            "username": "Username",
+            "bio": "Bio",
+            "bioPlaceholder": "Tell the world about yourself...",
+            "saveBtn": "Save Changes",
+            "success": "Profile updated successfully! 🚀",
+            "error": "Failed to update profile ❌"
+        },
+        "privacy": {
+            "title": "Privacy & Security",
+            "privateProfile": "Private Profile (Only followers can see posts)",
+            "hideStatus": "Hide Online Status & Last Seen",
+            "success": "Privacy settings updated!",
+            "error": "Failed to update settings"
+        },
+        "appearance": {
+            "baseTheme": "Base Theme",
+            "accentColor": "Accent Color",
+            "themeChanged": "Switched to {{theme}} mode!",
+            "accentChanged": "Accent color updated! ✨",
+            "themes": {
+                "dark": "Dark Mode",
+                "light": "Light Mode",
+                "fantasy": "Fantasy Mode"
+            }
+        },
+        "notifications": {
+            "title": "Notification Preferences",
+            "email": "Email Notifications",
+            "push": "Push Notifications (Browser)",
+            "infoTitle": "Stay in the loop",
+            "infoDesc": "Enable notifications to get updates about new followers, comments, and messages.",
+            "success": "Notification settings updated!",
+            "error": "Failed to update settings"
+        },
+        "language": {
+            "title": "Language Preferences"
+        },
+        "danger": {
+            "title": "Danger Zone",
+            "desc": "Deleting your account is permanent. All your data, posts, and connections will be wiped out immediately.",
+            "deleteBtn": "Delete My Account",
+            "disabledMsg": "Delete functionality disabled for safety."
+        }
+    },
+    "login": {
+        "hero": {
+            "titleStart": "Share Your",
+            "titleHighlight": "Digital Soul",
+            "description": "A modern space for developers and creators. No noise, just pure connection. Built for the future."
+        },
+        "welcomeBack": "Welcome back, Legend!",
+        "badge": {
+            "title": "Project Showcase",
+            "subtitle": "Secure • Real-time • Fast"
+        }
+    },
+    "feed": {
+        "forYou": "For You",
+        "following": "Following",
+        "emptyTitle": "No posts yet",
+        "emptyFollowing": "Follow more people to see their posts here!",
+        "emptyForYou": "Be the first to share something!",
+        "loadError": "Failed to load feed"
+    },
+    "stories": {
+        "yourStory": "Your Story",
+        "defaultUser": "User",
+        "window": {
+            "textMode": "Text",
+            "mediaMode": "Media",
+            "share": "Share",
+            "posting": "Posting...",
+            "textPlaceholder": "Type your story...",
+            "captionPlaceholder": "Add a caption...",
+            "uploadPlaceholder": "Upload Photo or Video",
+            "videoTooLong": "Video cannot be longer than 60 seconds!",
+            "emptyTextError": "Write something!",
+            "noMediaError": "Select media!",
+            "success": "Posted! 🚀",
+            "error": "Failed to post story"
+        },
+        "player": {
+            "storyViews": "Story Views",
+            "noViews": "No views yet",
+            "views": "Views",
+            "replyPlaceholder": "Send a message...",
+            "replySuccess": "Reply sent! 🚀",
+            "replyError": "Failed to send reply",
+            "deleteConfirm": "Delete this story?",
+            "deletedSuccess": "Deleted",
+            "deleteError": "Failed"
+        }
+    },
+    "post": {
+        "deleteConfirm": "Are you sure you want to delete this post?",
+        "deleteSuccess": "Post deleted successfully",
+        "deleteError": "Failed to delete post",
+        "loginRequired": "Please login first",
+        "saved": "Post Saved 💾",
+        "unsaved": "Removed from Saved",
+        "saveError": "Failed to save post",
+        "linkCopied": "Link copied to clipboard",
+        "shareSuccess": "Thanks for sharing! 🚀",
+        "hiddenTitle": "Post Hidden",
+        "hiddenDesc": "This post is hidden from others due to community reports.",
+        "copyLink": "Copy Link",
+        "save": "Save Post",
+        "unsave": "Unsave Post",
+        "edit": "Edit",
+        "delete": "Delete",
+        "report": "Report",
+        "reported": "Reported",
+        "share": "Share",
+        "sendInApp": "Send in App",
+        "shareVia": "Share via..."
+    },
+    "share": {
+        "title": "Send to...",
+        "searchPlaceholder": "Search people...",
+        "noChats": "No chats found.",
+        "sendBtn": "Send Post",
+        "checkOutMsg": "Check out this post by",
+        "success": "Sent successfully!",
+        "error": "Failed to send"
+    },
+    "editPost": {
+        "title": "Edit Post",
+        "placeholder": "What's on your mind?",
+        "cancel": "Cancel",
+        "save": "Save Changes",
+        "emptyError": "Post content cannot be empty",
+        "success": "Post updated successfully ✨",
+        "error": "Failed to update post"
+    },
+    "report": {
+        "title": "Report Post",
+        "subtitle": "Why are you reporting this post?",
+        "success": "Thanks! Report submitted successfully.",
+        "reasons": {
+            "spam": "Spam",
+            "harassment": "Harassment",
+            "hateSpeech": "Hate Speech",
+            "violence": "Violence",
+            "nudity": "Nudity",
+            "other": "Other"
+        }
+    },
+    "messages": {
+        "title": "Messages",
+        "newChat": "Start new chat",
+        "searchPlaceholder": "Search chats...",
+        "noChats": "No chats found",
+        "you": "You",
+        "photo": "📷 Photo",
+        "voice": "🎤 Voice",
+        "storyReply": "🔄 Re: Story",
+        "sharedPost": "📌 Shared Post",
+        "noMessages": "No messages",
+        "blockedByMe": "You blocked them",
+        "userUnavailable": "User unavailable"
+    },
+    "footer": {
+        "aboutLegal": "About & Legal",
+        "legalSubtitle": "Privacy, Terms, Developer",
+        "by": "By",
+        "designedBy": "Designed & Built by",
+        "acknowledge": "Acknowledge",
+        "noteTitle": "Portfolio Note",
+        "noteContent": "Created by Ali Haggag to demonstrate Full-Stack expertise.",
+        "docs": {
+            "privacy": {
+                "title": "Privacy Policy",
+                "shortTitle": "Privacy",
+                "content": "At Flurry, we take data privacy seriously. Since this is a portfolio project, we only store the absolute minimum data required to demonstrate functionality. Your secrets are safe with us!"
+            },
+            "terms": {
+                "title": "Terms of Service",
+                "shortTitle": "Terms",
+                "content": "Welcome to Flurry! This platform is designed as a sophisticated demonstration of Full-Stack development skills. By using it, you agree to maintain a respectful environment."
+            },
+            "advertising": {
+                "title": "Advertising Info",
+                "shortTitle": "Ads Info",
+                "content": "Good news! Flurry is a completely ad-free experience. This project was built to showcase clean UI/UX and engineering capabilities, not to sell you car insurance."
+            },
+            "cookies": {
+                "title": "Cookie Policy",
+                "shortTitle": "Cookies",
+                "content": "We use cookies solely for authentication purposes—basically, to remember that you are logged in. We do not use tracking cookies or third-party analytics."
+            }
+        }
+    },
+    "newChat": {
+        "title": "New Message",
+        "searchPlaceholder": "Search people...",
+        "noUsers": "No users found"
+    },
+    "layout": {
+        "toast": {
+            "newRequest": "New Request from {{name}}",
+            "newNotification": "New notification from {{name}}",
+            "someone": "Someone"
+        },
+        "aria": {
+            "search": "Search",
+            "menu": "Menu",
+            "notifications": "Notifications"
+        }
+    },
+    "createPost": {
+        "title": "Create Post",
+        "subtitle": "Share your thoughts, ideas, and moments with the world.",
+        "placeholder": "What's happening?",
+        "dropHere": "Drop images here!",
+        "uploadText": "Click or drag images to upload",
+        "addImage": "Add Images",
+        "addEmoji": "Add Emoji",
+        "postBtn": "Post",
+        "emptyError": "Please add content or images 📸",
+        "publishing": "Publishing your masterpiece... 🎨",
+        "success": "Published successfully! 🚀",
+        "error": "Failed to publish. Please try again."
+    },
+    "search": {
+        "discover": "Discover",
+        "amazingPeople": "Amazing People",
+        "subtitle": "Search for friends, creators, and inspiration.",
+        "placeholder": "Search by username...",
+        "startTyping": "Start typing to search...",
+        "noResults": "No users found for \"{{query}}\""
+    },
+    "connectionsChats": {
+        "title": "Messages",
+        "subtitle": "Pick a friend to start chatting with",
+        "searchPlaceholder": "Search friends...",
+        "viewProfile": "View Profile",
+        "noFriendsFound": "No friends found",
+        "noConversations": "No conversations yet",
+        "notFoundMsg": "We couldn't find anyone named \"{{query}}\"",
+        "connectMsg": "Connect with people to start chatting!",
+        "findFriends": "Find Friends"
+    },
+    "profile": {
+        "userUnavailable": "User Unavailable",
+        "noBio": "No bio available.",
+        "loadingSaved": "Loading saved posts...",
+        "tabs": {
+            "posts": "POSTS",
+            "media": "MEDIA",
+            "saved": "SAVED"
+        },
+        "actions": {
+            "editProfile": "Edit Profile",
+            "follow": "Follow",
+            "unfollow": "Unfollow",
+            "requested": "Requested",
+            "connected": "Connected",
+            "requestSent": "Request Sent",
+            "acceptRequest": "Accept Request",
+            "removeConnection": "Remove Connection",
+            "block": "Block",
+            "unblock": "Unblock"
+        },
+        "stats": {
+            "posts": "Posts",
+            "followers": "Followers",
+            "following": "Following"
+        },
+        "states": {
+            "blockedByMe": "You blocked this user",
+            "userUnavailable": "User unavailable"
+        },
+        "private": {
+            "title": "This Account is Private",
+            "desc": "Follow this account to see their photos and videos."
+        },
+        "empty": {
+            "posts": "No posts yet",
+            "media": "No photos shared",
+            "savedTitle": "No saved posts",
+            "savedDesc": "Save posts to watch them later."
+        },
+        "toasts": {
+            "actionFailed": "Action failed",
+            "requestSent": "Request sent! 🚀",
+            "connected": "Connected! 🎉",
+            "acceptFailed": "Failed to accept",
+            "connectionRemoved": "Connection removed",
+            "removeConfirm": "Remove connection?",
+            "blockConfirm": "Are you sure you want to {{action}} this user?",
+            "failed": "Failed",
+            "savedError": "Failed to load saved posts"
+        }
+    },
+    "updateProfile": {
+        "title": "Edit Profile",
+        "fullName": "Full Name",
+        "username": "Username",
+        "bio": "Bio",
+        "bioPlaceholder": "Tell us about yourself...",
+        "location": "Location",
+        "locationPlaceholder": "Where are you based?",
+        "cancel": "Cancel",
+        "save": "Save Changes",
+        "toasts": {
+            "updating": "Updating profile...",
+            "success": "Profile updated successfully! 🔥",
+            "error": "Could not update profile ❌"
+        }
+    },
+    "network": {
+        "followers": "Followers",
+        "following": "Following",
+        "loading": "Loading...",
+        "peopleCount": "@{{count}} People",
+        "searchPlaceholder": "Search {{type}}..."
+    },
+    "connections": {
+        "pageTitle": "Your Network",
+        "pageSubtitle": "Manage your circle and grow connections.",
+        "searchPlaceholder": "Search in {{tab}}...",
+        "noResults": "No results for \"{{query}}\"",
+        "emptyTab": "No {{tab}} found.",
+        "tabs": {
+            "followers": "Followers",
+            "following": "Following",
+            "friends": "Friends",
+            "requests": "Requests",
+            "sent": "Sent"
+        },
+        "types": {
+            "follow": "Follow Request",
+            "connection": "Connection Request"
+        },
+        "actions": {
+            "viewProfile": "View Profile",
+            "view": "View",
+            "confirm": "Confirm",
+            "accept": "Accept",
+            "message": "Message",
+            "cancelFollow": "Cancel Follow",
+            "cancelRequest": "Cancel Request"
+        },
+        "toasts": {
+            "followAccepted": "Follow request accepted",
+            "followDeclined": "Follow request declined",
+            "unfollowed": "Unfollowed / Request Cancelled",
+            "accepting": "Accepting...",
+            "connected": "Connected! 🎉",
+            "rejectConfirm": "Reject/Cancel this request?",
+            "requestRemoved": "Request removed",
+            "failed": "Failed"
+        }
+    },
+    "chat": {
+        "status": {
+            "unavailable": "User unavailable",
+            "online": "Online",
+            "lastSeen": "Last seen",
+            "offline": "Offline"
+        },
+        "replyingTo": "Replying to",
+        "imageSelected": "Image selected",
+        "readyToSend": "Ready to send",
+        "youBlocked": "You blocked this user",
+        "conversationClosed": "Conversation Closed",
+        "notConnected": "You are not connected",
+        "goToProfile": "Go to Profile",
+        "placeholder": "Type a message...",
+        "placeholderReply": "Type your reply...",
+        "toasts": {
+            "messageNotLoaded": "Message not loaded here",
+            "reactionFailed": "Failed to add reaction",
+            "micDenied": "Microphone access denied 🚫",
+            "blockedError": "Cannot send message (Blocked) 🚫",
+            "sendFailed": "Failed to send message"
+        }
+    },
+    "chatInfo": {
+        "title": "Contact Info",
+        "membersCount": "{{count}} members",
+        "groupMembers": "Group Members ({{count}})",
+        "media": "Media",
+        "files": "Files",
+        "links": "Links",
+        "noMedia": "No media shared yet",
+        "noFiles": "No files shared yet",
+        "noLinks": "No links shared yet",
+        "mute": "Mute Notifications",
+        "unmute": "Unmute Notifications",
+        "block": "Block User",
+        "unblock": "Unblock User",
+        "deleteChat": "Delete Chat History",
+        "leaveGroup": "Leave Group",
+        "groupMuteSoon": "Mute for groups coming soon! 🤫",
+        "deleteConfirm": "Delete chat history? This cannot be undone.",
+        "leaveConfirm": "Leave \"{{name}}\" group?",
+        "kickConfirm": "Remove {{name}} from the group?",
+        "chatCleared": "Chat cleared ✨",
+        "leftGroup": "You left the group 👋",
+        "kicked": "{{name}} removed",
+        "error": "Failed",
+        "copied": "Copied: {{text}} 📋",
+        "ownerBadge": "OWNER",
+        "youBadge": "YOU",
+        "removeMember": "Remove Member",
+        "closeGroup": "Close Chat",
+        "openGroup": "Open Chat",
+        "openGroupDesc":"Everyone can send",
+        "closeGroupDesc":"Only admins can send"
+    },
+    "reactions": {
+        "title": "Reactions",
+        "all": "All",
+        "none": "No reactions found"
+    },
+    "comment": {
+        "edited": "edited",
+        "edit": "Edit",
+        "delete": "Delete",
+        "reply": "Reply",
+        "hideReplies": "Hide replies",
+        "viewReplies": "View {{count}} replies",
+        "replyPlaceholder": "Reply to {{name}}..."
+    },
+    "sharedPost": {
+        "unavailable": "Post unavailable",
+        "post": "Post"
+    },
+    "createGroup": {
+        "title": "Create Group",
+        "nameRequired": "Group name is required!",
+        "success": "Group created successfully! 🎉",
+        "error": "Failed to create group",
+        "change": "Change",
+        "iconLabel": "Group Icon",
+        "nameLabel": "Group Name",
+        "namePlaceholder": "e.g. Football Fans ⚽",
+        "descLabel": "Description",
+        "descPlaceholder": "What is this group about?",
+        "createBtn": "Create Group 🚀"
+    },
+    "notifications": {
+        "title": "Notifications",
+        "subtitle": "Stay updated with your latest interactions.",
+        "markAll": "Mark all read",
+        "emptyTitle": "All caught up!",
+        "emptyDesc": "No new notifications to show. Go make some noise! 🎉",
+        "tabs": {
+            "all": "All",
+            "likes": "Likes",
+            "comments": "Comments",
+            "replies": "Replies",
+            "shares": "Shares",
+            "follows": "Follows"
+        },
+        "groups": {
+            "today": "Today",
+            "yesterday": "Yesterday",
+            "earlier": "Earlier"
+        },
+        "types": {
+            "like": "liked your post.",
+            "comment": "commented on your post.",
+            "reply": "replied to your comment.",
+            "share": "shared your post.",
+            "follow": "started following you.",
+            "connection_request": "sent you a connection request 👥",
+            "connection_accept": "accepted your connection request 🤝",
+            "follow_accept": "accepted your follow request ✅"
+        },
+        "actions": {
+            "markRead": "Mark as read",
+            "delete": "Delete"
+        },
+        "toasts": {
+            "markingRead": "Marking all as read...",
+            "allRead": "All caught up!",
+            "failedSync": "Failed to sync with server.",
+            "removed": "Notification removed",
+            "failedDelete": "Failed to delete"
+        }
+    },
+    "availableGroups": {
+        "title": "Discover Communities",
+        "subtitle": "Find your tribe, connect with like-minded people, and start new conversations.",
+        "searchPlaceholder": "Search for groups...",
+        "noResultsTitle": "No communities found matching \"{{query}}\"",
+        "noResultsDesc": "Try searching for something else or check back later.",
+        "members": "Members",
+        "noDescription": "No description available for this group.",
+        "joinBtn": "Join Community",
+        "requestSent": "Request Sent",
+        "toasts": {
+            "loadError": "Failed to load groups",
+            "requestSent": "Request sent! Waiting for approval ⏳",
+            "joinError": "Failed to join"
+        }
+    },
+    "myGroups": {
+        "title": "My Communities",
+        "subtitle": "Manage your groups, connect with people, and build your own tribe.",
+        "createBtn": "Create Group",
+        "noGroups": "No groups found in this category.",
+        "exploreLink": "Explore new groups to join",
+        "owner": "OWNER",
+        "pending": "PENDING",
+        "members": "Members",
+        "waitingApproval": "Waiting Approval",
+        "openChat": "Open Chat",
+        "settings": "Group Settings",
+        "tabs": {
+            "all": "All Chats",
+            "managed": "Managed 👑",
+            "joined": "Joined 🤝"
+        }
+    },
+    "groupChat": {
+        "pendingTitle": "Membership Pending",
+        "pendingDesc": "Wait for the admin to accept your request.",
+        "goBack": "Go Back",
+        "membersActive": "{{count}} members active",
+        "isTyping": "is typing...",
+        "chatLockedMsg": "Only admins can send messages at this time.",
+        "toasts": {
+            "messageNotLoaded": "Message not loaded here",
+            "notMember": "You are not a member of this group"
+        }
+    },
+    "groupRequests": {
+        "title": "Join Requests",
+        "subtitle": "Review and manage pending join requests.",
+        "newBadge": "NEW",
+        "wantsToJoin": "Wants to join the group",
+        "decline": "Decline",
+        "accept": "Accept",
+        "allCaughtUp": "All Caught Up!",
+        "noRequests": "No pending requests at the moment.",
+        "toasts": {
+            "loadError": "Failed to load requests",
+            "welcomed": "New member welcomed! 🎉",
+            "declined": "Request declined.",
+            "error": "Something went wrong"
+        }
+    },
+    "postDetails": {
+        "title": "Post Details",
+        "by": "By",
+        "discussion": "Discussion ({{count}})",
+        "noComments": "No comments yet",
+        "addComment": "Add a comment...",
+        "toasts": {
+            "loadFailed": "Failed to load post.",
+            "emptyComment": "Comment cannot be empty.",
+            "commentAdded": "Comment added!",
+            "replyAdded": "Reply added!",
+            "commentFailed": "Failed to add comment.",
+            "deleteCommentConfirm": "Delete this comment?",
+            "commentDeleted": "Comment deleted",
+            "deleteCommentFailed": "Failed to delete comment",
+            "commentUpdated": "Comment updated",
+            "updateCommentFailed": "Failed to update comment"
+        }
+    },
+    "notFound": {
+        "title": "Page Not Found",
+        "desc": "Oops! The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.",
+        "goBack": "Go Back",
+        "home": "Home Page"
+    },
+    "message": {
+        "deleted": "Deleted message",
+        "deleted_success": "Message deleted successfully",
+        "delete_failed": "Failed to delete message",
+        "photo": "Photo",
+        "voice": "Voice Message",
+        "storyReply": "Replied to story"
+    },
+    "edited": "edited",
+    "Edit": "Edit",
+    "Delete": "Delete",
+    "Reply": "Reply",
+    "React": "React",
+    "polls": {
+        "createTitle": "Create Poll",
+        "questionLabel": "Question",
+        "questionPlaceholder": "Ask a question...",
+        "optionsLabel": "Options",
+        "optionPlaceholder": "Option",
+        "addOption": "Add Option",
+        "allowMultiple": "Allow multiple answers",
+        "createButton": "Create Poll",
+        "votes": "votes",
+        "vote": "vote",
+        "singleChoice": "Single Choice",
+        "multipleChoice": "Multiple Choice"
+    }
+}

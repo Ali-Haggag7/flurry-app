@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { ArrowLeft, Search, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next"; // 🟢
 
 // --- Local Imports ---
 import api from "../lib/axios";
@@ -19,6 +20,7 @@ const NetworkPage = () => {
     const { getToken } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+    const { t } = useTranslation(); // 🟢
 
     // Determine view type based on URL
     const type = useMemo(
@@ -97,27 +99,27 @@ const NetworkPage = () => {
                     <button
                         onClick={handleBack}
                         aria-label="Back"
-                        className="p-2 hover:bg-surface rounded-full transition text-muted hover:text-content border border-transparent hover:border-adaptive"
+                        className="p-2 hover:bg-surface rounded-full transition text-muted hover:text-content border border-transparent hover:border-adaptive rtl:scale-x-[-1]" // 🔵 RTL flip
                     >
                         <ArrowLeft size={24} />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-bold capitalize text-content">{type}</h1>
+                        <h1 className="text-2xl font-bold capitalize text-content">{t(`network.${type}`)}</h1> {/* 🟢 */}
                         <p className="text-muted text-sm font-medium">
-                            {loading ? "Loading..." : `@${users.length} People`}
+                            {loading ? t("network.loading") : t("network.peopleCount", { count: users.length })} {/* 🟢 */}
                         </p>
                     </div>
                 </header>
 
                 {/* Search Bar */}
                 <div className="relative mb-6 group">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted w-5 h-5 group-focus-within:text-primary transition-colors" />
+                    <Search className="absolute start-3 top-1/2 -translate-y-1/2 text-muted w-5 h-5 group-focus-within:text-primary transition-colors" /> {/* 🔵 start-3 */}
                     <input
                         type="text"
-                        placeholder={`Search ${type}...`}
+                        placeholder={t("network.searchPlaceholder", { type: t(`network.${type}`) })} // 🟢
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-surface border border-adaptive rounded-xl py-3 pl-10 pr-4 text-content placeholder-muted focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition shadow-sm"
+                        className="w-full bg-surface border border-adaptive rounded-xl py-3 ps-10 pe-4 text-content placeholder-muted focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition shadow-sm" // 🔵 ps-10 pe-4
                     />
                 </div>
 
@@ -137,7 +139,7 @@ const NetworkPage = () => {
                                     />
                                 ))
                             ) : (
-                                <EmptyState type={type} />
+                                <EmptyState type={t(`network.${type}`)} /> // 🟢
                             )}
                         </AnimatePresence>
                     </div>
@@ -190,7 +192,7 @@ const NetworkSkeletonList = React.memo(() => (
                 className="flex items-center p-4 bg-surface border border-adaptive rounded-2xl animate-pulse shadow-sm"
             >
                 <div className="w-12 h-12 bg-main rounded-full shrink-0"></div>
-                <div className="flex-1 ml-4 space-y-2">
+                <div className="flex-1 ms-4 space-y-2"> {/* 🔵 ms-4 */}
                     <div className="h-4 bg-main rounded w-1/3"></div>
                     <div className="h-3 bg-main rounded w-1/4"></div>
                 </div>

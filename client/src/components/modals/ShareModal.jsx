@@ -12,6 +12,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next"; // 🟢
 
 // Icons
 import { X, Search, Send, Loader2, Check } from "lucide-react";
@@ -24,6 +25,7 @@ import UserAvatar from "../common/UserDefaultAvatar";
 
 const ShareModal = ({ isOpen, onClose, post, onSuccess }) => {
     const { getToken } = useAuth();
+    const { t } = useTranslation(); // 🟢
     const [chats, setChats] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedChatId, setSelectedChatId] = useState(null);
@@ -68,20 +70,20 @@ const ShareModal = ({ isOpen, onClose, post, onSuccess }) => {
         try {
             const token = await getToken();
             const postLink = `${window.location.origin}/post/${post._id}`;
-            const messageText = `Check out this post by ${post.user?.full_name}:\n${postLink}`;
+            const messageText = `${t("share.checkOutMsg")} ${post.user?.full_name}:\n${postLink}`; // 🟢 Translated msg
 
             await api.post("/message/send", {
                 receiverId: selectedChatId,
                 text: messageText,
-                sharedPostId: post._id // Critical for displaying the shared card
+                sharedPostId: post._id
             }, { headers: { Authorization: `Bearer ${token}` } });
 
-            toast.success("Sent successfully!");
+            toast.success(t("share.success")); // 🟢
             if (onSuccess) onSuccess();
             onClose();
         } catch (error) {
             console.error(error);
-            toast.error("Failed to send");
+            toast.error(t("share.error")); // 🟢
         } finally {
             setSending(false);
         }
@@ -109,7 +111,7 @@ const ShareModal = ({ isOpen, onClose, post, onSuccess }) => {
                 >
                     {/* Header */}
                     <div className="p-4 border-b border-adaptive flex justify-between items-center bg-main/50 backdrop-blur-md">
-                        <h3 className="font-bold text-content text-lg">Send to...</h3>
+                        <h3 className="font-bold text-content text-lg">{t("share.title")}</h3> {/* 🟢 */}
                         <button onClick={onClose} className="p-2 hover:bg-main rounded-full transition text-muted hover:text-primary">
                             <X size={20} />
                         </button>
@@ -118,13 +120,13 @@ const ShareModal = ({ isOpen, onClose, post, onSuccess }) => {
                     {/* Search */}
                     <div className="p-4 bg-surface border-b border-adaptive">
                         <div className="relative group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary transition-colors" size={18} />
+                            <Search className="absolute start-3 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary transition-colors" size={18} />
                             <input
                                 type="text"
-                                placeholder="Search people..."
+                                placeholder={t("share.searchPlaceholder")} // 🟢
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-main border border-adaptive rounded-xl py-2.5 pl-10 pr-4 text-sm text-content focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-muted"
+                                className="w-full bg-main border border-adaptive rounded-xl py-2.5 ps-10 pe-4 text-sm text-content focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-muted"
                                 autoFocus
                             />
                         </div>
@@ -139,9 +141,9 @@ const ShareModal = ({ isOpen, onClose, post, onSuccess }) => {
                         ) : filteredChats.length === 0 ? (
                             <div className="text-center py-10 flex flex-col items-center">
                                 <div className="w-16 h-16 bg-main rounded-full flex items-center justify-center mb-3 border border-adaptive">
-                                    <Send size={24} className="text-muted opacity-50" />
+                                    <Send size={24} className="text-muted opacity-50 rtl:rotate-180" /> {/* 🟢 RTL Icon */}
                                 </div>
-                                <p className="text-muted font-medium">No chats found.</p>
+                                <p className="text-muted font-medium">{t("share.noChats")}</p> {/* 🟢 */}
                             </div>
                         ) : (
                             filteredChats.map((chat) => {
@@ -165,14 +167,14 @@ const ShareModal = ({ isOpen, onClose, post, onSuccess }) => {
                                                 className={`w-10 h-10 rounded-full border ${isSelected ? "border-primary" : "border-adaptive"}`}
                                             />
                                             {isSelected && (
-                                                <div className="absolute -bottom-1 -right-1 bg-primary rounded-full p-1 border-2 border-surface animate-in zoom-in duration-200">
+                                                <div className="absolute -bottom-1 -end-1 bg-primary rounded-full p-1 border-2 border-surface animate-in zoom-in duration-200">
                                                     <Check size={10} className="text-white" strokeWidth={4} />
                                                 </div>
                                             )}
                                         </div>
-                                        <div className="flex-1 min-w-0">
+                                        <div className="flex-1 min-w-0 text-start"> {/* 🔵 text-start */}
                                             <h4 className={`font-bold text-sm truncate transition-colors ${isSelected ? "text-primary" : "text-content"}`}>
-                                                {partner.full_name || "Unknown User"}
+                                                {partner.full_name || t("stories.defaultUser")} {/* 🟢 */}
                                             </h4>
                                             <p className="text-xs text-muted truncate">@{partner.username}</p>
                                         </div>
@@ -189,7 +191,7 @@ const ShareModal = ({ isOpen, onClose, post, onSuccess }) => {
                             disabled={!selectedChatId || sending}
                             className="w-full bg-primary hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20 active:scale-95"
                         >
-                            {sending ? <Loader2 className="animate-spin" size={20} /> : <><Send size={18} /> Send Post</>}
+                            {sending ? <Loader2 className="animate-spin" size={20} /> : <><Send size={18} className="rtl:rotate-180" /> {t("share.sendBtn")}</>} {/* 🟢 */}
                         </button>
                     </div>
                 </motion.div>

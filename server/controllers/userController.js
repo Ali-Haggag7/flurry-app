@@ -4,7 +4,7 @@ import Notification from "../models/Notification.js";
 import imagekit from "../configs/imagekit.js";
 import sendEmail from "../utils/sendEmail.js";
 import { io, getReceiverSocketId } from "../socket/socket.js";
-import { createNotification } from "./notificationController.js";
+import { clerkClient } from "@clerk/clerk-sdk-node";
 
 /**
  * @file userController.js
@@ -60,7 +60,7 @@ export const syncUser = expressAsyncHandler(async (req, res) => {
         to: email,
         subject: "Welcome to Flurry! 🚀",
         html: `
-            <div style="font-family: sans-serif; text-align: center; padding: 20px; background-color: #f9fafb; border-radius: 10px;">
+            <div style="font-family: sans-serif; text-align: center; padding: 20px; background-color: #f9fafb; border-eadius: 10px;">
                 <h1 style="color: #2563eb;">Welcome ${fullName}! 👋</h1>
                 <p>We are thrilled to have you on board.</p>
                 <hr style="margin: 20px 0;" />
@@ -97,23 +97,11 @@ export const getUserData = expressAsyncHandler(async (req, res) => {
  * @access Private
  */
 export const updateUserData = expressAsyncHandler(async (req, res) => {
-    const { userId } = req.auth();
+    const { userId } = req.auth();  // Clerk ID
     let { username, bio, location, full_name } = req.body;
 
-    // 1. Username Uniqueness Check
-    if (username) {
-        const tempUser = await User.findOne({ clerkId: userId });
-        if (tempUser.username !== username) {
-            const userExists = await User.findOne({ username });
-            if (userExists) {
-                res.status(400);
-                throw new Error("Username is already taken");
-            }
-        }
-    }
-
+    // 1. Prepare Data for MongoDB
     const updatedData = {
-        ...(username && { username }),
         ...(bio && { bio }),
         ...(location && { location }),
         ...(full_name && { full_name }),
@@ -155,7 +143,48 @@ export const updateUserData = expressAsyncHandler(async (req, res) => {
         });
     }
 
-    // 4. Update Database & Return New User
+    // 4. Update Clerk Profile
+    try {
+        const clerkUpdateData = {};
+
+        if (username) {
+            const userExists = await User.findOne({ username });
+            if (userExists && userExists.clerkId !== userId) {
+                res.status(400);
+                throw new Error("Username is already taken (Local DB check)");
+            }
+
+            clerkUpdateData.username = username;
+            updatedData.username = username;
+        }
+
+        if (full_name) {
+            const nameParts = full_name.trim().split(" ");
+            clerkUpdateData.firstName = nameParts[0];
+            clerkUpdateData.lastName = nameParts.slice(1).join(" ") || ""; // the rest as last name
+        }
+
+        if (Object.keys(clerkUpdateData).length > 0) {
+            await clerkClient.users.updateUser(userId, clerkUpdateData);
+        }
+
+    } catch (error) {
+        console.error("❌ Clerk Update Failed:", error);
+
+        // if Clerk provides specific error messages, forward them
+        if (error.errors && error.errors[0]?.message) {
+            res.status(400);
+            throw new Error(`Clerk Error: ${error.errors[0].message}`);
+        } else if (error.message.includes("Username is already taken")) {
+            res.status(400);
+            throw new Error("Username is already taken");
+        } else {
+            res.status(500);
+            throw new Error("Failed to update user identity in Clerk");
+        }
+    }
+
+    // 5. Update Database & Return New User
     const user = await User.findOneAndUpdate(
         { clerkId: userId },
         updatedData,
@@ -494,4 +523,31 @@ export const updateNotificationSettings = expressAsyncHandler(async (req, res) =
 
     await user.save();
     res.status(200).json({ success: true, settings: user.notificationSettings });
+});
+
+
+// @desc    Save FCM Token for Push Notifications
+// @route   POST /api/user/fcm-token
+// @access  Private
+export const saveFcmToken = expressAsyncHandler(async (req, res) => {
+    const { token } = req.body;
+    const { userId } = req.auth();
+
+    if (!token) {
+        res.status(400);
+        throw new Error("Token is required");
+    }
+
+    const user = await User.findOneAndUpdate(
+        { clerkId: userId },
+        { $addToSet: { fcmTokens: token } },
+        { new: true }
+    );
+
+    if (!user) {
+        res.status(404);
+        throw new Error("User not found");
+    }
+
+    res.status(200).json({ success: true, message: "Token saved successfully" });
 });

@@ -2,12 +2,6 @@
  * @component MyGroups
  * @description Renders a dashboard of groups the user manages or has joined.
  * Features filtering (All/Managed/Joined), creation modal, and status indicators.
- *
- * @features
- * - Optimistic UI updates
- * - Memoized child components (GroupCard, FilterTabs)
- * - Lazy loaded CreateGroupModal for performance
- * - Strict Theme System adherence
  */
 
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
@@ -15,6 +9,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useAuth } from "@clerk/clerk-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next"; // 🟢
 import {
     Plus,
     MessageCircle,
@@ -40,12 +35,12 @@ const CreateGroupModal = lazy(() => import("../components/modals/CreateGroupModa
  * @component FilterTabs
  * @description Renders the filter navigation tabs.
  */
-const FilterTabs = React.memo(({ filter, setFilter }) => {
+const FilterTabs = React.memo(({ filter, setFilter, t }) => { // 🟢 Receive t
     const tabs = useMemo(() => [
-        { id: 'all', label: 'All Chats' },
-        { id: 'managed', label: 'Managed 👑' },
-        { id: 'joined', label: 'Joined 🤝' }
-    ], []);
+        { id: 'all', label: t("myGroups.tabs.all") }, // 🟢
+        { id: 'managed', label: t("myGroups.tabs.managed") }, // 🟢
+        { id: 'joined', label: t("myGroups.tabs.joined") } // 🟢
+    ], [t]);
 
     return (
         <div className="flex bg-surface p-1.5 rounded-2xl w-full md:w-fit mb-10 border border-adaptive shadow-sm overflow-x-auto no-scrollbar">
@@ -65,7 +60,7 @@ const FilterTabs = React.memo(({ filter, setFilter }) => {
                     {filter === tab.id && (
                         <motion.div
                             layoutId="activeGroupTab"
-                            className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full mx-4 mb-1"
+                            className="absolute bottom-0 start-0 end-0 h-0.5 bg-primary rounded-full mx-4 mb-1"
                         />
                     )}
                 </button>
@@ -79,7 +74,7 @@ FilterTabs.displayName = "FilterTabs";
  * @component GroupCard
  * @description Renders an individual group card with status logic.
  */
-const GroupCard = React.memo(({ group, userId, currentUser, navigate }) => {
+const GroupCard = React.memo(({ group, userId, currentUser, navigate, t }) => { // 🟢 Receive t
     // Logic to determine membership status
     const isOwner = group.owner?.clerkId === userId;
     const activeMembersCount = group.members?.filter(m => m.status === 'accepted').length || 0;
@@ -124,17 +119,17 @@ const GroupCard = React.memo(({ group, userId, currentUser, navigate }) => {
         >
             {/* Status Badges */}
             {isOwner && (
-                <div className="absolute top-0 right-0 bg-linear-to-bl from-amber-500/20 to-transparent px-4 py-2 rounded-bl-3xl border-b border-l border-amber-500/10">
+                <div className="absolute top-0 end-0 bg-linear-to-bl from-amber-500/20 to-transparent px-4 py-2 rounded-bl-3xl border-b border-s border-amber-500/10 rtl:rounded-bl-none rtl:rounded-br-3xl rtl:border-s-0 rtl:border-e"> {/* 🔵 RTL Logic */}
                     <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 flex items-center gap-1 uppercase tracking-wider">
-                        <Crown size={12} fill="currentColor" /> OWNER
+                        <Crown size={12} fill="currentColor" /> {t("myGroups.owner")} {/* 🟢 */}
                     </span>
                 </div>
             )}
 
             {isPending && (
-                <div className="absolute top-0 right-0 bg-linear-to-bl from-yellow-500/20 to-transparent px-4 py-2 rounded-bl-3xl border-b border-l border-yellow-500/10">
+                <div className="absolute top-0 end-0 bg-linear-to-bl from-yellow-500/20 to-transparent px-4 py-2 rounded-bl-3xl border-b border-s border-yellow-500/10 rtl:rounded-bl-none rtl:rounded-br-3xl rtl:border-s-0 rtl:border-e"> {/* 🔵 RTL Logic */}
                     <span className="text-[10px] font-black text-yellow-600 dark:text-yellow-400 flex items-center gap-1 uppercase tracking-wider">
-                        <Clock size={12} /> PENDING
+                        <Clock size={12} /> {t("myGroups.pending")} {/* 🟢 */}
                     </span>
                 </div>
             )}
@@ -154,9 +149,9 @@ const GroupCard = React.memo(({ group, userId, currentUser, navigate }) => {
                     <h3 className={`font-bold text-xl leading-tight mb-1 truncate transition-colors ${isPending ? "text-content/70" : "text-content group-hover:text-primary"}`}>
                         {group.name}
                     </h3>
-                    <p className="text-xs text-muted flex items-center gap-1.5 font-medium bg-main/50 w-fit px-2 py-1 rounded-lg">
+                    <p className="text-xs text-muted flex items-center gap-1.5 font-medium bg-main/50 w-fit px-2 py-1 rounded-sg">
                         <Users size={14} />
-                        <span className="text-content font-bold">{activeMembersCount}</span> Members
+                        <span className="text-content font-bold">{activeMembersCount}</span> {t("myGroups.members")} {/* 🟢 */}
                     </p>
                 </div>
             </div>
@@ -176,12 +171,12 @@ const GroupCard = React.memo(({ group, userId, currentUser, navigate }) => {
                     {isPending ? (
                         <>
                             <Clock size={18} />
-                            <span className="whitespace-nowrap">Waiting Approval</span>
+                            <span className="whitespace-nowrap">{t("myGroups.waitingApproval")}</span> {/* 🟢 */}
                         </>
                     ) : (
                         <>
                             <MessageCircle size={18} className="text-white" />
-                            <span className="whitespace-nowrap">Open Chat</span>
+                            <span className="whitespace-nowrap">{t("myGroups.openChat")}</span> {/* 🟢 */}
                         </>
                     )}
                 </button>
@@ -190,11 +185,11 @@ const GroupCard = React.memo(({ group, userId, currentUser, navigate }) => {
                     <button
                         onClick={handleSettingsClick}
                         className="w-14 flex items-center justify-center bg-main hover:bg-surface text-muted hover:text-primary rounded-xl transition-all border border-adaptive hover:border-primary/30 relative shadow-sm group/settings"
-                        title="Group Settings"
+                        title={t("myGroups.settings")} // 🟢
                     >
                         <Settings size={22} className="group-hover/settings:rotate-90 transition-transform duration-500" />
                         {pendingCount > 0 && (
-                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                            <span className="absolute -top-1 -end-1 flex h-3 w-3">
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                                 <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border border-surface"></span>
                             </span>
@@ -220,6 +215,7 @@ const MyGroups = () => {
     const { userId, getToken } = useAuth();
     const navigate = useNavigate();
     const { currentUser } = useSelector((state) => state.user);
+    const { t } = useTranslation(); // 🟢
 
     // --- Effects ---
 
@@ -279,24 +275,24 @@ const MyGroups = () => {
 
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6 border-b border-adaptive pb-8">
-                    <div>
+                    <div className="text-start"> {/* 🔵 text-start */}
                         <h2 className="text-3xl md:text-4xl font-extrabold text-content mb-2 tracking-tight">
-                            My Communities
+                            {t("myGroups.title")} {/* 🟢 */}
                         </h2>
                         <p className="text-muted text-sm md:text-base font-medium max-w-lg">
-                            Manage your groups, connect with people, and build your own tribe.
+                            {t("myGroups.subtitle")} {/* 🟢 */}
                         </p>
                     </div>
                     <button
                         onClick={toggleModal}
                         className="px-7 py-3.5 bg-linear-to-r from-primary to-primary/80 hover:opacity-90 text-white rounded-2xl flex items-center gap-2.5 font-bold shadow-lg shadow-primary/20 active:scale-95 transition-all"
                     >
-                        <Plus size={22} strokeWidth={2.5} /> Create Group
+                        <Plus size={22} strokeWidth={2.5} /> {t("myGroups.createBtn")} {/* 🟢 */}
                     </button>
                 </div>
 
                 {/* Filters */}
-                <FilterTabs filter={filter} setFilter={setFilter} />
+                <FilterTabs filter={filter} setFilter={setFilter} t={t} /> {/* 🟢 Pass t */}
 
                 {/* Grid Display */}
                 {filteredGroups.length === 0 ? (
@@ -308,13 +304,13 @@ const MyGroups = () => {
                         <div className="w-24 h-24 bg-main rounded-full flex items-center justify-center mb-6 border border-adaptive">
                             <Layers size={48} className="text-muted opacity-50" />
                         </div>
-                        <p className="text-content text-xl font-bold mb-2">No groups found in this category.</p>
+                        <p className="text-content text-xl font-bold mb-2">{t("myGroups.noGroups")}</p> {/* 🟢 */}
                         {filter === 'joined' && (
                             <Link
                                 to="/groups/available"
                                 className="text-primary hover:text-primary/80 font-bold flex items-center gap-2 hover:underline mt-2 transition-colors"
                             >
-                                Explore new groups to join <ArrowRight size={18} />
+                                {t("myGroups.exploreLink")} <ArrowRight size={18} className="rtl:rotate-180" /> {/* 🟢 */}
                             </Link>
                         )}
                     </motion.div>
@@ -328,6 +324,7 @@ const MyGroups = () => {
                                     userId={userId}
                                     currentUser={currentUser}
                                     navigate={navigate}
+                                    t={t} // 🟢 Pass t
                                 />
                             ))}
                         </AnimatePresence>

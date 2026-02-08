@@ -75,6 +75,14 @@ const messageSchema = new mongoose.Schema(
             default: false,
             index: true, // Optimized for "Unread Count" queries
         },
+        isDeleted: {
+            type: Boolean,
+            default: false
+        },
+        isEdited: {
+            type: Boolean,
+            default: false
+        },
 
         // --- Privacy & Visibility ---
         // Soft Delete: Contains IDs of users who deleted this message for themselves
@@ -127,14 +135,19 @@ messageSchema.index({ createdAt: -1 });
  * Ensures data integrity based on message_type before saving to DB.
  */
 messageSchema.pre("validate", function (next) {
-    // 1. Text Messages: Must have content if no media is attached
+    // 🟢 1. (FIX) Skip validation if the message is deleted
+    if (this.isDeleted) {
+        return next();
+    }
+
+    // 2. Text Messages: Must have content if no media is attached
     if (this.message_type === "text" && !this.media_url) {
         if (!this.text || this.text.trim().length === 0) {
             return next(new Error("Text message cannot be empty without media."));
         }
     }
 
-    // 2. Media Messages: Must have a URL
+    // 3. Media Messages: Must have a URL
     const mediaTypes = ["image", "audio", "video", "file"];
     if (mediaTypes.includes(this.message_type)) {
         if (!this.media_url) {
@@ -144,12 +157,12 @@ messageSchema.pre("validate", function (next) {
         }
     }
 
-    // 3. Shared Post: Must have a post ID
+    // 4. Shared Post: Must have a post ID
     if (this.message_type === "shared_post" && !this.sharedPostId) {
         return next(new Error("Shared post message must include a sharedPostId."));
     }
 
-    // 4. Story Reply: Must have a story ID
+    // 5. Story Reply: Must have a story ID
     if (this.message_type === "story_reply" && !this.replyToStoryId) {
         return next(
             new Error("Story reply message must include a replyToStoryId.")

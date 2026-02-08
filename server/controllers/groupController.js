@@ -4,6 +4,8 @@ import GroupMessage from "../models/GroupMessage.js";
 import User from "../models/User.js";
 import imagekit from "../configs/imagekit.js";
 import { connections } from "./messageController.js";
+import { io, getReceiverSocketId } from "../socket/socket.js";
+import { sendGroupPushNotification } from "../utils/sendNotification.js";
 
 /**
  * @file groupController.js
@@ -370,6 +372,12 @@ export const sendGroupMessage = expressAsyncHandler(async (req, res) => {
 
     if (!group) { res.status(404); throw new Error("Group not found"); }
 
+    // --- Chat Lock Check ---
+    if (group.isChatLocked && group.owner.toString() !== currentUser._id.toString()) {
+        res.status(403);
+        throw new Error("Chat is locked by admin");
+    }
+
     const isMember = group.members.some(
         m => m.user.toString() === currentUser._id.toString() && m.status === "accepted"
     );
@@ -417,24 +425,51 @@ export const sendGroupMessage = expressAsyncHandler(async (req, res) => {
 
     // 4. Populate
     newMessage = await newMessage.populate([
-        POPULATE_MESSAGE_SENDER,
-        POPULATE_REPLY_TO
+        { path: "sender", select: "full_name username profile_picture" },
+        { path: "replyTo", select: "text media_url message_type sender" }
     ]);
 
     // 5. SSE & Socket Emission
-    // A. SSE (Direct connections)
+    // A. SSE
     const payload = JSON.stringify(newMessage);
     group.members.forEach(member => {
         const memberId = member.user.toString();
-        if (memberId !== currentUser._id.toString() && connections[memberId]) {
-            connections[memberId].write(`data: ${payload}\n\n`);
+        if (memberId !== currentUser._id.toString() && global.connections && global.connections[memberId]) {
+            global.connections[memberId].write(`data: ${payload}\n\n`);
         }
     });
 
-    // B. Socket.io (Room based)
+    // B. Socket.io
     const io = req.app.get("io");
     if (io) {
         io.to(groupId).emit("receiveGroupMessage", newMessage);
+    }
+
+    // 🔥🔥🔥 6. Group Push Notification Logic (New) 🔥🔥🔥
+    try {
+        const recipientIds = group.members
+            .filter(m => m.user.toString() !== currentUser._id.toString() && m.status === "accepted")
+            .map(m => m.user);
+
+        if (recipientIds.length > 0) {
+            let notificationBody = text;
+            if (messageType === 'image') notificationBody = `📷 ${currentUser.full_name} sent a photo`;
+            else if (messageType === 'audio') notificationBody = `🎤 ${currentUser.full_name} sent a voice message`;
+            else notificationBody = `${currentUser.full_name}: ${text}`;
+
+            await sendGroupPushNotification(
+                recipientIds,
+                group.name,
+                notificationBody,
+                {
+                    type: "group_chat",
+                    groupId: groupId,
+                    groupName: group.name
+                }
+            );
+        }
+    } catch (error) {
+        console.error("⚠️ Failed to send group notification:", error);
     }
 
     res.status(201).json({ success: true, data: newMessage });
@@ -449,6 +484,11 @@ export const getGroupMessages = expressAsyncHandler(async (req, res) => {
     const { userId } = req.auth();
     const { groupId } = req.params;
 
+    // 🟢 Pagination Parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
     const currentUser = await User.findOne({ clerkId: userId });
     const group = await Group.findById(groupId);
 
@@ -460,16 +500,24 @@ export const getGroupMessages = expressAsyncHandler(async (req, res) => {
 
     if (!isMember) { res.status(403); throw new Error("Not a member"); }
 
+    // 🟢 Updated Query: Sort -1, Skip, Limit
     const messages = await GroupMessage.find({ group: groupId })
+        .sort({ createdAt: -1 }) // Newest first
+        .skip(skip)
+        .limit(limit)
         .populate(POPULATE_MESSAGE_SENDER)
         .populate(POPULATE_REPLY_TO)
         .populate("reactions.user", "full_name username profile_picture")
-        .sort({ createdAt: 1 }); // Ensure consistent ordering
+        .lean(); // Using lean for performance is recommended here too
+
+    // 🟢 Re-order to chronological
+    const sortedMessages = messages.reverse();
 
     res.status(200).json({
         success: true,
-        count: messages.length,
-        messages
+        count: sortedMessages.length,
+        messages: sortedMessages,
+        hasMore: messages.length === limit // 🟢 Helper flag
     });
 });
 
@@ -635,4 +683,276 @@ export const markGroupMessagesRead = expressAsyncHandler(async (req, res) => {
     }
 
     res.status(200).json({ success: true });
+});
+
+/**
+ * @desc Toggle Group Lock
+ * @route PUT /api/group/toggle-lock/:groupId
+ * @access Private (Owner Only)
+ */
+export const toggleGroupLock = expressAsyncHandler(async (req, res) => {
+    const { userId } = req.auth;
+    const { groupId } = req.params;
+
+    const currentUser = await User.findOne({ clerkId: userId });
+    if (!currentUser) {
+        res.status(404);
+        throw new Error("User not found");
+    }
+
+    const group = await Group.findById(groupId);
+    if (!group) {
+        res.status(404);
+        throw new Error("Group not found");
+    }
+
+    if (group.owner.toString() !== currentUser._id.toString()) {
+        res.status(403);
+        throw new Error("Not authorized: Only the group owner can lock the chat");
+    }
+
+    group.isChatLocked = !group.isChatLocked;
+    await group.save();
+
+    const io = req.app.get("io");
+    if (io) {
+        io.to(groupId).emit("groupUpdated", {
+            groupId,
+            isChatLocked: group.isChatLocked
+        });
+
+        const systemMsg = await GroupMessage.create({
+            group: groupId,
+            sender: currentUser._id,
+            text: group.isChatLocked ? "🔒 Group chat locked by admin" : "🔓 Group chat unlocked by admin",
+            message_type: "system",
+            readBy: [currentUser._id]
+        });
+        io.to(groupId).emit("receiveGroupMessage", systemMsg);
+    }
+
+    res.status(200).json({ success: true, isChatLocked: group.isChatLocked });
+});
+
+/**
+ * @desc    Delete a group message (Soft Delete)
+ * @route   DELETE /api/group/message/:id
+ * @access  Private
+ */
+export const deleteGroupMessage = expressAsyncHandler(async (req, res) => {
+    const { id: messageId } = req.params;
+    const { userId: clerkId } = req.auth();
+
+    const user = await User.findOne({ clerkId });
+    if (!user) { res.status(404); throw new Error("User not found"); }
+
+    const message = await GroupMessage.findById(messageId);
+    if (!message) { res.status(404); throw new Error("Message not found"); }
+
+    // Find the group to check permissions (Admin can delete anyone's msg)
+    const group = await Group.findById(message.group); // Assuming message has 'group' field
+    if (!group) { res.status(404); throw new Error("Group not found"); }
+
+    const isSender = message.sender.toString() === user._id.toString();
+    const isAdmin = group.owner.toString() === user._id.toString(); // Or check admins array
+
+    if (!isSender && !isAdmin) {
+        res.status(401);
+        throw new Error("Not authorized to delete this message");
+    }
+
+    // Soft Delete
+    message.text = "";
+    message.media_url = null;
+    message.isDeleted = true;
+    await message.save();
+
+    // 🟢 Socket Notification (Broadcast to Group Room)
+    try {
+        if (typeof io !== 'undefined') {
+            io.to(message.group.toString()).emit("groupMessageDeleted", {
+                messageId,
+                groupId: message.group.toString()
+            });
+        }
+    } catch (socketError) {
+        console.error("Socket emit failed:", socketError);
+    }
+
+    res.status(200).json({ success: true, message: "Group message deleted" });
+});
+
+/**
+ * @desc    Edit a group message
+ * @route   PUT /api/group/message/:id
+ * @access  Private
+ */
+export const editGroupMessage = expressAsyncHandler(async (req, res) => {
+    const { id: messageId } = req.params;
+    const { text } = req.body;
+    const { userId: clerkId } = req.auth();
+
+    if (!text || !text.trim()) { res.status(400); throw new Error("Text required"); }
+
+    // 1. Find User
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+        res.status(404); throw new Error("User not found");
+    }
+
+    // 2. Find Message (Using GroupMessage Model)
+    const message = await GroupMessage.findById(messageId);
+
+    if (!message) {
+        res.status(404); throw new Error("Group Message not found");
+    }
+
+    // Only sender can edit
+    if (message.sender.toString() !== user._id.toString()) {
+        res.status(401);
+        throw new Error("Not authorized");
+    }
+
+    if (message.isDeleted) { res.status(400); throw new Error("Cannot edit deleted message"); }
+
+    message.text = text;
+    message.isEdited = true;
+    await message.save();
+
+    // 🟢 Socket Notification
+    try {
+        if (typeof io !== 'undefined') {
+            io.to(message.group.toString()).emit("groupMessageUpdated", {
+                messageId,
+                groupId: message.group.toString(),
+                newText: text,
+                isEdited: true
+            });
+        }
+    } catch (socketError) { console.error("Socket emit failed:", socketError); }
+
+    res.status(200).json({ success: true, data: message });
+});
+
+/**
+ * @desc    Create a new Poll message
+ * @route   POST /api/group/poll
+ * @access  Private
+ */
+export const createPoll = expressAsyncHandler(async (req, res) => {
+    const { groupId, question, options, allowMultipleAnswers } = req.body;
+    const { userId: clerkId } = req.auth();
+
+    // 1. Validation
+    if (!groupId || !question || !options || !Array.isArray(options) || options.length < 2) {
+        res.status(400);
+        throw new Error("Invalid poll data. Must have question and at least 2 options.");
+    }
+
+    const user = await User.findOne({ clerkId });
+    if (!user) { res.status(404); throw new Error("User not found"); }
+
+    const group = await Group.findById(groupId);
+    if (!group) { res.status(404); throw new Error("Group not found"); }
+
+    // 2. Check Membership
+    const isMember = group.members.some(m => m.user.toString() === user._id.toString() && m.status === "accepted");
+    if (!isMember) { res.status(403); throw new Error("You are not a member of this group"); }
+
+    // 3. Check Chat Lock (Optional - if you want polls to respect lock)
+    if (group.isChatLocked && group.owner.toString() !== user._id.toString()) {
+        res.status(403); throw new Error("Chat is locked");
+    }
+
+    // 4. Create Poll Message
+    // Format options: Array of strings -> Array of Objects { text, votes: [] }
+    const formattedOptions = options.map(opt => ({ text: opt, votes: [] }));
+
+    const newPoll = await GroupMessage.create({
+        group: groupId,
+        sender: user._id,
+        message_type: "poll",
+        poll: {
+            question,
+            options: formattedOptions,
+            allowMultipleAnswers: allowMultipleAnswers || false
+        },
+        readBy: [user._id]
+    });
+
+    // Populate sender details for frontend
+    await newPoll.populate("sender", "full_name username profile_picture image");
+
+    // 5. Socket Emit
+    try {
+        const io = req.app.get("io");
+        if (io) {
+            io.to(groupId).emit("receiveGroupMessage", newPoll);
+        }
+    } catch (error) { console.error("Socket emit failed:", error); }
+
+    res.status(201).json({ success: true, message: newPoll });
+});
+
+/**
+ * @desc    Vote on a Poll
+ * @route   PUT /api/group/poll/vote
+ * @access  Private
+ */
+export const votePoll = expressAsyncHandler(async (req, res) => {
+    const { messageId, optionIndex } = req.body; // optionIndex (0, 1, 2...) is safer than ID sometimes, but ID is fine too
+    const { userId: clerkId } = req.auth();
+
+    const user = await User.findOne({ clerkId });
+    if (!user) { res.status(404); throw new Error("User not found"); }
+
+    const message = await GroupMessage.findById(messageId);
+    if (!message || message.message_type !== "poll") {
+        res.status(404); throw new Error("Poll not found");
+    }
+
+    // Validate Option
+    if (optionIndex < 0 || optionIndex >= message.poll.options.length) {
+        res.status(400); throw new Error("Invalid option index");
+    }
+
+    const userIdStr = user._id.toString();
+    const poll = message.poll;
+    const targetOption = poll.options[optionIndex];
+
+    // --- Voting Logic ---
+
+    // Check if user already voted for THIS option
+    const alreadyVotedThis = targetOption.votes.some(id => id.toString() === userIdStr);
+
+    if (alreadyVotedThis) {
+        // Unvote (Toggle off) - Remove user from this option
+        targetOption.votes = targetOption.votes.filter(id => id.toString() !== userIdStr);
+    } else {
+        // Logic for Single Choice vs Multiple Choice
+        if (!poll.allowMultipleAnswers) {
+            // Remove vote from ALL other options first
+            poll.options.forEach(opt => {
+                opt.votes = opt.votes.filter(id => id.toString() !== userIdStr);
+            });
+        }
+        // Add vote to target option
+        targetOption.votes.push(user._id);
+    }
+
+    // Save changes (Mongoose detects subdoc changes)
+    await message.save();
+
+    // 🟢 Socket Emit (Live Update for Progress Bars)
+    try {
+        const io = req.app.get("io");
+        if (io) {
+            io.to(message.group.toString()).emit("pollUpdated", {
+                messageId: message._id,
+                poll: message.poll // Send the whole updated poll object
+            });
+        }
+    } catch (error) { console.error("Socket emit failed:", error); }
+
+    res.status(200).json({ success: true, poll: message.poll });
 });

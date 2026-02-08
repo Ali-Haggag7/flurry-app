@@ -50,7 +50,7 @@ const StoryRing = ({ stories, userId, children }) => {
             <svg
                 width={size}
                 height={size}
-                className="absolute top-0 left-0 z-10 pointer-events-none"
+                className="absolute top-0 start-0 z-10 pointer-events-none"
                 viewBox={`0 0 ${size} ${size}`}
             >
                 <defs>

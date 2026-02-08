@@ -1,60 +1,126 @@
 /**
  * @file main.jsx
  * @description Application Entry Point & Provider Composition Root.
- * This file is responsible for bootstrapping the React application and wrapping
- * the component tree with necessary global providers (Redux, Auth, Router, Theme, Sockets).
- *
- * @architecture
- * 1. Redux Provider (Global State)
- * 2. Clerk Provider (Authentication)
- * 3. Browser Router (Routing)
- * 4. Context Providers (Socket, Theme)
+ * Handles Global Polyfills, PWA Registration, and Context Injection.
  */
 
-import { StrictMode } from 'react';
+// =========================================================
+// 🟢 1. Polyfills (WebRTC & Simple-Peer Support)
+// =========================================================
+import { Buffer } from 'buffer';
+import process from 'process';
+
+// Attach polyfills to the global window object to support older libraries
+window.global = window;
+window.process = process;
+window.Buffer = Buffer;
+
+// Manual fallback for process.nextTick (Required for some WebRTC libs)
+if (!window.process.nextTick) {
+  window.process.nextTick = (cb, ...args) => {
+    setTimeout(() => {
+      cb(...args);
+    }, 0);
+  };
+}
+
+// =========================================================
+// 🟢 2. Imports
+// =========================================================
+
+// --- React & Core ---
+import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { ClerkProvider } from '@clerk/clerk-react';
-import { Provider } from 'react-redux';
 
-// --- Local & Context Imports ---
+// --- State Management & Auth ---
+import { Provider } from 'react-redux';
+import { ClerkProvider } from '@clerk/clerk-react';
+import { arSA, enUS } from "@clerk/localizations";
+
+// --- I18n ---
+import { useTranslation } from "react-i18next";
+import './i18n';
+
+// --- PWA ---
+import { registerSW } from 'virtual:pwa-register';
+
+// --- Local Store & Contexts ---
 import { store } from './app/store';
 import { SocketContextProvider } from './context/SocketContext.jsx';
+import { CallProvider } from './context/CallContext.jsx';
 import { ThemeProvider } from "./context/ThemeContext";
+
+// --- Components ---
 import App from './App.jsx';
+import CallModal from './components/modals/CallModal';
 
 // --- Global Styles ---
 import './index.css';
 
-// --- Configuration ---
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+// =========================================================
+// 🟢 3. Configuration & Initialization
+// =========================================================
 
+// --- PWA Service Worker Registration ---
+const updateSW = registerSW({
+  onNeedRefresh() {
+    // eslint-disable-next-line no-restricted-globals
+    if (confirm("New content available. Reload?")) {
+      updateSW(true);
+    }
+  },
+  onOfflineReady() {
+    console.log("App is ready to work offline!");
+  },
+});
+
+// --- Environment Validation ---
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 if (!PUBLISHABLE_KEY) {
   throw new Error('Missing Clerk Publishable Key');
 }
 
-// --- Application Bootstrapping ---
+// --- Dynamic Clerk Wrapper (Handles Localization) ---
+const ClerkWithTranslation = ({ children }) => {
+  const { i18n } = useTranslation();
+
+  return (
+    <ClerkProvider
+      publishableKey={PUBLISHABLE_KEY}
+      localization={i18n.language === 'ar' ? arSA : enUS}
+    >
+      {children}
+    </ClerkProvider>
+  );
+};
+
+// =========================================================
+// 🟢 4. Render Tree
+// =========================================================
+
 const root = createRoot(document.getElementById('root'));
 
 root.render(
   <StrictMode>
-    {/* Provider Tree:
-      - Provider (Redux): Encases the app to allow state access even during auth flow.
-      - ClerkProvider: Handles authentication context.
-      - BrowserRouter: Enables routing features.
-      - SocketContextProvider: Real-time features (requires Auth/Router usually).
-      - ThemeProvider: UI Theming.
-    */}
     <Provider store={store}>
-      <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+      <ClerkWithTranslation>
         <BrowserRouter>
           <SocketContextProvider>
-            <ThemeProvider>
-              <App />
-            </ThemeProvider>
+            <CallProvider>
+              <ThemeProvider>
+
+                {/* Main Application */}
+                <App />
+
+                {/* Global Modals (Placed here to access all contexts) */}
+                <CallModal />
+
+              </ThemeProvider>
+            </CallProvider>
           </SocketContextProvider>
         </BrowserRouter>
-      </ClerkProvider>
+      </ClerkWithTranslation>
     </Provider>
   </StrictMode>
 );

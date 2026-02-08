@@ -13,6 +13,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next"; // 🟢
 
 // Icons
 import { Camera, X, Loader2, User, MapPin, AlignLeft } from "lucide-react";
@@ -24,6 +25,7 @@ const UpdateProfileModal = ({ setShowEdit }) => {
     const dispatch = useDispatch();
     const { getToken } = useAuth();
     const user = useSelector((state) => state.user.currentUser);
+    const { t } = useTranslation(); // 🟢
 
     // --- State ---
     const [loading, setLoading] = useState(false);
@@ -72,9 +74,9 @@ const UpdateProfileModal = ({ setShowEdit }) => {
             const actionPromise = dispatch(updateUser({ formData: userData, token })).unwrap();
 
             await toast.promise(actionPromise, {
-                loading: 'Updating profile...',
-                success: 'Profile updated successfully! 🔥',
-                error: (err) => err?.message || 'Could not update profile ❌',
+                loading: t("updateProfile.toasts.updating"), // 🟢
+                success: t("updateProfile.toasts.success"), // 🟢
+                error: (err) => err?.message || t("updateProfile.toasts.error"), // 🟢
             });
 
             setShowEdit(false);
@@ -99,7 +101,7 @@ const UpdateProfileModal = ({ setShowEdit }) => {
                 >
                     {/* --- Header --- */}
                     <div className="flex justify-between items-center p-4 px-6 border-b border-adaptive bg-main/50 backdrop-blur-md">
-                        <h2 className="text-lg font-bold text-content">Edit Profile</h2>
+                        <h2 className="text-lg font-bold text-content">{t("updateProfile.title")}</h2> {/* 🟢 */}
                         <button
                             onClick={() => setShowEdit(false)}
                             className="p-2 hover:bg-main rounded-full text-muted hover:text-primary transition-colors"
@@ -147,12 +149,12 @@ const UpdateProfileModal = ({ setShowEdit }) => {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 {/* Full Name */}
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-muted uppercase ml-1">Full Name</label>
+                                    <label className="text-xs font-bold text-muted uppercase ms-1">{t("updateProfile.fullName")}</label> {/* 🟢 */}
                                     <div className="relative group focus-within:text-primary transition-colors">
-                                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary transition-colors" size={18} />
+                                        <User className="absolute start-3 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary transition-colors" size={18} /> {/* 🔵 start-3 */}
                                         <input
                                             type="text"
-                                            className="w-full pl-10 pr-4 py-3 bg-main border border-adaptive rounded-xl text-content placeholder-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
+                                            className="w-full ps-10 pe-4 py-3 bg-main border border-adaptive rounded-xl text-content placeholder-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all" // 🔵 ps-10 pe-4
                                             value={editForm.full_name}
                                             onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
                                             placeholder="John Doe"
@@ -162,15 +164,22 @@ const UpdateProfileModal = ({ setShowEdit }) => {
 
                                 {/* Username */}
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-muted uppercase ml-1">Username</label>
+                                    <label className="text-xs font-bold text-muted uppercase ms-1">{t("updateProfile.username")}</label> {/* 🟢 */}
                                     <div className="relative group focus-within:text-primary transition-colors">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary font-bold transition-colors">@</span>
+                                        <span className="absolute start-3 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary font-bold transition-colors">@</span> {/* 🔵 start-3 */}
                                         <input
                                             type="text"
-                                            className="w-full pl-8 pr-4 py-3 bg-main border border-adaptive rounded-xl text-content placeholder-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
+                                            className="w-full ps-8 pe-4 py-3 bg-main border border-adaptive rounded-xl text-content placeholder-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all" // 🔵 ps-8 pe-4
                                             value={editForm.username}
-                                            onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                const sanitized = val.replace(/[^a-zA-Z0-9-_]/g, "").toLowerCase();
+
+                                                setEditForm({ ...editForm, username: sanitized });
+                                            }}
                                             placeholder="username"
+                                            minLength={4}
+                                            maxLength={20}
                                         />
                                     </div>
                                 </div>
@@ -178,13 +187,13 @@ const UpdateProfileModal = ({ setShowEdit }) => {
 
                             {/* Bio */}
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-muted uppercase ml-1">Bio</label>
+                                <label className="text-xs font-bold text-muted uppercase ms-1">{t("updateProfile.bio")}</label> {/* 🟢 */}
                                 <div className="relative group focus-within:text-primary transition-colors">
-                                    <AlignLeft className="absolute left-3 top-3.5 text-muted group-focus-within:text-primary transition-colors" size={18} />
+                                    <AlignLeft className="absolute start-3 top-3.5 text-muted group-focus-within:text-primary transition-colors" size={18} /> {/* 🔵 start-3 */}
                                     <textarea
                                         rows="3"
-                                        className="w-full pl-10 pr-4 py-3 bg-main border border-adaptive rounded-xl text-content placeholder-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all resize-none leading-relaxed custom-scrollbar"
-                                        placeholder="Tell us about yourself..."
+                                        className="w-full ps-10 pe-4 py-3 bg-main border border-adaptive rounded-xl text-content placeholder-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all resize-none leading-relaxed custom-scrollbar" // 🔵 ps-10 pe-4
+                                        placeholder={t("updateProfile.bioPlaceholder")} // 🟢
                                         value={editForm.bio}
                                         onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
                                     />
@@ -193,13 +202,13 @@ const UpdateProfileModal = ({ setShowEdit }) => {
 
                             {/* Location */}
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-muted uppercase ml-1">Location</label>
+                                <label className="text-xs font-bold text-muted uppercase ms-1">{t("updateProfile.location")}</label> {/* 🟢 */}
                                 <div className="relative group focus-within:text-primary transition-colors">
-                                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary transition-colors" size={18} />
+                                    <MapPin className="absolute start-3 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary transition-colors" size={18} /> {/* 🔵 start-3 */}
                                     <input
                                         type="text"
-                                        className="w-full pl-10 pr-4 py-3 bg-main border border-adaptive rounded-xl text-content placeholder-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
-                                        placeholder="Where are you based?"
+                                        className="w-full ps-10 pe-4 py-3 bg-main border border-adaptive rounded-xl text-content placeholder-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all" // 🔵 ps-10 pe-4
+                                        placeholder={t("updateProfile.locationPlaceholder")} // 🟢
                                         value={editForm.location}
                                         onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
                                     />
@@ -213,14 +222,14 @@ const UpdateProfileModal = ({ setShowEdit }) => {
                                     onClick={() => setShowEdit(false)}
                                     className="px-5 py-2.5 rounded-xl text-muted hover:text-content hover:bg-main transition font-medium border border-transparent hover:border-adaptive"
                                 >
-                                    Cancel
+                                    {t("updateProfile.cancel")} {/* 🟢 */}
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={loading}
                                     className="px-6 py-2.5 rounded-xl bg-primary hover:opacity-90 text-white font-bold shadow-lg shadow-primary/20 active:scale-95 transition flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                                 >
-                                    {loading ? <Loader2 size={18} className="animate-spin" /> : "Save Changes"}
+                                    {loading ? <Loader2 size={18} className="animate-spin" /> : t("updateProfile.save")} {/* 🟢 */}
                                 </button>
                             </div>
                         </div>

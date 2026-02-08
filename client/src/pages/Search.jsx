@@ -14,6 +14,7 @@ import React, { useState, useEffect, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next"; // 🟢
 import {
     Search as SearchIcon,
     ArrowRight,
@@ -60,7 +61,7 @@ const UserSearchResultCard = memo(({ user, index, onClick }) => (
                 </p>
             )}
         </div>
-        <div className="p-2 text-muted group-hover:text-primary group-hover:translate-x-1 transition-all">
+        <div className="p-2 text-muted group-hover:text-primary group-hover:translate-x-1 transition-all rtl:scale-x-[-1]"> {/* 🔵 RTL Flip Arrow */}
             <ArrowRight size={18} />
         </div>
     </motion.div>
@@ -98,6 +99,7 @@ const Search = () => {
 
     const { getToken } = useAuth();
     const navigate = useNavigate();
+    const { t } = useTranslation(); // 🟢
 
     // --- Handlers ---
 
@@ -171,15 +173,15 @@ const Search = () => {
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="mb-8 text-left"
+                    className="mb-8 text-start" // 🔵 text-start
                 >
                     <h1 className="text-3xl md:text-4xl font-extrabold text-content mb-2">
-                        Discover <span className="text-transparent bg-clip-text bg-linear-to-r from-primary to-primary/60">
-                            Amazing People
+                        {t("search.discover")} <span className="text-transparent bg-clip-text bg-linear-to-r from-primary to-primary/60">
+                            {t("search.amazingPeople")} {/* 🟢 */}
                         </span>
                     </h1>
                     <p className="text-muted text-sm md:text-base">
-                        Search for friends, creators, and inspiration.
+                        {t("search.subtitle")} {/* 🟢 */}
                     </p>
                 </motion.div>
 
@@ -195,11 +197,11 @@ const Search = () => {
 
                         {/* Input Container */}
                         <div className="relative flex items-center bg-surface rounded-2xl p-1.5 border border-adaptive shadow-lg transition-all duration-300 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20">
-                            <SearchIcon className="ml-3 text-muted w-5 h-5 group-focus-within:text-primary transition-colors" />
+                            <SearchIcon className="ms-3 text-muted w-5 h-5 group-focus-within:text-primary transition-colors" /> {/* 🔵 ms-3 */}
 
                             <input
                                 type="text"
-                                placeholder="Search by username..."
+                                placeholder={t("search.placeholder")} // 🟢
                                 className="w-full bg-transparent text-content px-3 py-2.5 text-base focus:outline-none border-none outline-none ring-0 placeholder-muted/70"
                                 onChange={(e) => setInput(e.target.value)}
                                 value={input}
@@ -207,7 +209,7 @@ const Search = () => {
                             />
 
                             {/* Actions (Clear/Loading) */}
-                            <div className="flex items-center gap-1 mr-1">
+                            <div className="flex items-center gap-1 me-1"> {/* 🔵 me-1 */}
                                 {loading && <Loader2 size={16} className="animate-spin text-primary mx-2" />}
                                 {input && !loading && (
                                     <button
@@ -237,7 +239,7 @@ const Search = () => {
                                 className="text-center py-10 opacity-60"
                             >
                                 <TrendingUp className="w-12 h-12 text-primary/50 mx-auto mb-3" />
-                                <p className="text-muted text-sm">Start typing to search...</p>
+                                <p className="text-muted text-sm">{t("search.startTyping")}</p> {/* 🟢 */}
                             </motion.div>
                         )}
 
@@ -248,7 +250,7 @@ const Search = () => {
                                 animate={{ opacity: 1 }}
                                 className="text-center py-10"
                             >
-                                <p className="text-xl text-muted font-medium">No users found for "{input}"</p>
+                                <p className="text-xl text-muted font-medium">{t("search.noResults", { query: input })}</p> {/* 🟢 Dynamic */}
                             </motion.div>
                         )}
 

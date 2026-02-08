@@ -9,6 +9,7 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next"; // 🟢
 
 // Icons
 import { X, Search, UserPlus, MessageSquare } from "lucide-react";
@@ -18,6 +19,7 @@ import UserAvatar from "../common/UserDefaultAvatar";
 
 const NewChatModal = ({ isOpen, onClose }) => {
     const navigate = useNavigate();
+    const { t } = useTranslation(); // 🟢
     const [searchQuery, setSearchQuery] = useState("");
     const { connections } = useSelector((state) => state.connections || { connections: [] });
 
@@ -63,7 +65,7 @@ const NewChatModal = ({ isOpen, onClose }) => {
                         <div className="p-4 border-b border-adaptive flex items-center justify-between bg-surface/50">
                             <h2 className="text-lg font-bold text-content flex items-center gap-2">
                                 <UserPlus size={20} className="text-primary" />
-                                New Message
+                                {t("newChat.title")} {/* 🟢 */}
                             </h2>
                             <button onClick={onClose} className="p-2 hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition text-muted hover:text-red-500">
                                 <X size={20} />
@@ -73,13 +75,13 @@ const NewChatModal = ({ isOpen, onClose }) => {
                         {/* Search Bar */}
                         <div className="p-4 pb-2">
                             <div className="relative group">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted group-focus-within:text-primary transition-colors" />
+                                <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted group-focus-within:text-primary transition-colors" /> {/* 🔵 start-3 */}
                                 <input
                                     type="text"
-                                    placeholder="Search people..."
+                                    placeholder={t("newChat.searchPlaceholder")} // 🟢
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full bg-surface border border-adaptive rounded-xl py-2.5 pl-10 pr-4 text-sm text-content focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all placeholder-muted"
+                                    className="w-full bg-surface border border-adaptive rounded-xl py-2.5 ps-10 pe-4 text-sm text-content focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all placeholder-muted" // 🔵 ps-10 pe-4
                                     autoFocus
                                 />
                             </div>
@@ -95,13 +97,13 @@ const NewChatModal = ({ isOpen, onClose }) => {
                                         className="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface transition-colors cursor-pointer group"
                                     >
                                         <UserAvatar user={user} className="w-12 h-12 rounded-full border border-adaptive" />
-                                        <div className="flex-1 min-w-0">
+                                        <div className="flex-1 min-w-0 text-start"> {/* 🔵 text-start */}
                                             <h4 className="font-bold text-sm text-content truncate group-hover:text-primary transition-colors">
                                                 {user.full_name}
                                             </h4>
                                             <p className="text-xs text-muted truncate">@{user.username}</p>
                                         </div>
-                                        <button className="p-2 bg-primary/10 text-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity scale-90 group-hover:scale-100">
+                                        <button className="p-2 bg-primary/10 text-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity scale-90 group-hover:scale-100 rtl:scale-x-[-1]"> {/* 🔵 RTL flip icon */}
                                             <MessageSquare size={18} />
                                         </button>
                                     </div>
@@ -111,7 +113,7 @@ const NewChatModal = ({ isOpen, onClose }) => {
                                     <div className="w-16 h-16 bg-surface rounded-full flex items-center justify-center mb-3">
                                         <Search size={32} className="opacity-50" />
                                     </div>
-                                    <p className="text-sm">No users found</p>
+                                    <p className="text-sm">{t("newChat.noUsers")}</p> {/* 🟢 */}
                                 </div>
                             )}
                         </div>

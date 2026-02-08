@@ -1,12 +1,16 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { useUser } from '@clerk/clerk-react';
+import { useUser, useAuth } from '@clerk/clerk-react'; // 🟢 Added useAuth
 import { Toaster } from 'react-hot-toast';
+import { useTranslation } from "react-i18next";
 
 // --- Components & Layouts ---
 import Loading from './components/common/Loading';
 import AuthWrapper from './layouts/AuthWrapper';
 import Layout from './layouts/Layout';
+import useOfflineSync from "./hooks/useOfflineSync";
+import api from "./lib/axios"; // 🟢 Import API
+import { requestFcmToken } from "./lib/firebase"; // 🟢 Import Firebase Helper
 
 // --- Lazy Loaded Pages (Code Splitting) ---
 // Optimized for performance: Routes are loaded only when requested to reduce initial bundle size.
@@ -47,18 +51,62 @@ const ProtectedRoute = () => {
  * @description Main application entry point managing routing, global providers, and theme-aware feedback.
  */
 const App = () => {
+  const { i18n } = useTranslation();
+  const { userId, getToken } = useAuth(); // 🟢 Get User ID & Token for FCM
+
+  // 🟢 2. Run Sync Engine Globally
+  useOfflineSync();
+
+  // 🟢 3. Initialize Push Notifications
+  useEffect(() => {
+    const initializeNotifications = async () => {
+      if (!userId) return; // Don't run if not logged in
+
+      try {
+        // A. Request Permission & Get Token
+        const fcmToken = await requestFcmToken();
+
+        if (fcmToken) {
+          // B. Send Token to Backend
+          const authToken = await getToken();
+          await api.post("/user/fcm-token", { token: fcmToken }, {
+            headers: { Authorization: `Bearer ${authToken}` }
+          });
+        }
+      } catch (error) {
+        console.error("❌ Failed to sync notification token", error);
+      }
+    };
+
+    initializeNotifications();
+  }, [userId, getToken]);
+
+  // 🟢 4. Handle Language Direction
+  useEffect(() => {
+    // Force direction based on language
+    document.documentElement.dir = i18n.dir();
+    // Force language
+    document.documentElement.lang = i18n.language;
+  }, [i18n.language]);
+
   return (
     <>
-      {/* Global Toast Notifications - Themed */}
+      {/* Global Toast Notifications - Themed & Localized */}
       <Toaster
         position="top-center"
         reverseOrder={false}
+        // Force toast container direction based on language
+        containerStyle={{
+          direction: i18n.dir(),
+        }}
         toastOptions={{
           className: 'bg-surface text-content border border-adaptive shadow-lg',
           style: {
             // Inherit styles from Tailwind classes where possible, specific overrides for library defaults
             padding: '16px',
             borderRadius: '12px',
+            direction: i18n.dir(), // Ensure text inside toast follows direction
+            fontFamily: 'inherit',
           },
           success: {
             iconTheme: {

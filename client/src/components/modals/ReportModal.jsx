@@ -11,6 +11,7 @@ import { useState } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next"; // 🟢
 
 // Icons
 import { X, ShieldAlert, Flag } from "lucide-react";
@@ -18,37 +19,40 @@ import { X, ShieldAlert, Flag } from "lucide-react";
 // API
 import api from "../../lib/axios";
 
-const REPORT_REASONS = [
-    "Spam",
-    "Harassment",
-    "Hate Speech",
-    "Violence",
-    "Nudity",
-    "Other"
+// 🟢 Moved reasons inside component or translation file is better, but here we can map keys
+const REPORT_REASONS_KEYS = [
+    "spam",
+    "harassment",
+    "hateSpeech",
+    "violence",
+    "nudity",
+    "other"
 ];
 
 const ReportModal = ({ postId, onClose, onSuccess }) => {
     const { getToken } = useAuth();
+    const { t } = useTranslation(); // 🟢
 
     const handleReport = async (reason) => {
         // Optimistic UI: Close and show success immediately
         onSuccess();
         onClose();
-        toast.success("Thanks! Report submitted successfully.");
+        toast.success(t("report.success")); // 🟢
 
         try {
             const token = await getToken();
+            // Send the raw reason key or translated string (usually backend expects consistent keys)
+            // Here sending the key for consistency
             await api.post(`/post/report/${postId}`, { reason }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
         } catch (error) {
             console.error("Report submission failed:", error);
-            // Silent fail is acceptable for reporting to avoid UX friction
         }
     };
 
     return (
-        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             {/* Backdrop */}
             <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -66,7 +70,7 @@ const ReportModal = ({ postId, onClose, onSuccess }) => {
                 <div className="p-4 border-b border-adaptive flex justify-between items-center bg-main/50 backdrop-blur-md">
                     <h3 className="font-bold text-content flex items-center gap-2">
                         <ShieldAlert className="text-red-500" size={20} />
-                        Report Post
+                        {t("report.title")} {/* 🟢 */}
                     </h3>
                     <button onClick={onClose} className="p-1.5 hover:bg-main rounded-full text-muted transition-colors">
                         <X size={20} />
@@ -75,16 +79,16 @@ const ReportModal = ({ postId, onClose, onSuccess }) => {
 
                 {/* Reasons List */}
                 <div className="p-2">
-                    <p className="text-sm text-muted px-4 py-2 font-medium">Why are you reporting this post?</p>
+                    <p className="text-sm text-muted px-4 py-2 font-medium">{t("report.subtitle")}</p> {/* 🟢 */}
                     <div className="flex flex-col gap-1">
-                        {REPORT_REASONS.map((reason) => (
+                        {REPORT_REASONS_KEYS.map((reasonKey) => (
                             <button
-                                key={reason}
-                                onClick={() => handleReport(reason)}
-                                className="w-full text-left px-4 py-3 hover:bg-main rounded-lg text-content font-medium transition flex items-center justify-between group"
+                                key={reasonKey}
+                                onClick={() => handleReport(reasonKey)} // Sending key
+                                className="w-full text-start px-4 py-3 hover:bg-main rounded-sg text-content font-medium transition flex items-center justify-between group" // 🔵 text-start
                             >
-                                {reason}
-                                <Flag size={16} className="text-muted group-hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all" />
+                                {t(`report.reasons.${reasonKey}`)} {/* 🟢 Dynamic Translation */}
+                                <Flag size={16} className="text-muted group-hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all rtl:scale-x-[-1]" /> {/* 🔵 RTL Icon flip if needed */}
                             </button>
                         ))}
                     </div>
