@@ -42,26 +42,12 @@ const messaging = firebase.messaging();
 
 /**
  * 🌙 Background Message Handler
- * This handles messages when the browser is in the background or closed.
- * Note: If the backend sends a 'notification' payload, the browser might
- * show it automatically. This handler allows for custom handling/logging.
  */
 messaging.onBackgroundMessage((payload) => {
     console.log('🌙 [SW] Background Notification Received:', payload);
 
-    // Optional: If you want to customize the notification only if
-    // the backend didn't send a full display payload.
-    // Since our Backend sends 'webpush' config, this is mostly for logging/debugging.
-    const notificationTitle = payload.notification?.title || "New Message";
-    const notificationOptions = {
-        body: payload.notification?.body || "",
-        icon: payload.notification?.icon || "/icon-192x192.png", // Fallback icon
-        tag: payload.notification?.tag, // Important for grouping
-        data: payload.data
-    };
-
-    // Use self.registration to show notification
-    return self.registration.showNotification(notificationTitle, notificationOptions);
+    // السطر ده هو اللي كان بيعمل التكرار
+    // return self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
 
