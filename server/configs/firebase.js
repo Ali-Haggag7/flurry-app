@@ -9,32 +9,20 @@ try {
     const rawData = process.env.FIREBASE_SERVICE_ACCOUNT;
 
     if (rawData) {
-        // console.log("📡 [Firebase] Raw Config Found. Length:", rawData.length);
-
         // 1. Parsing JSON
         serviceAccount = JSON.parse(rawData);
 
-        // 2. Fixing Private Key (Critical Step) 🔧
+        // 2. Fixing Private Key (The Ultimate Fix) 🔧
         if (serviceAccount.private_key) {
-            // تنظيف المفتاح من أي شوائب
             serviceAccount.private_key = serviceAccount.private_key
-                .replace(/\\n/g, '\n')  // يحول \n لسطر جديد حقيقي
-                .replace(/\\\\n/g, '\n') // لو فيه دبل سلاش يصلحها
-                .replace(/"/g, '')      // يشيل أي علامات تنصيص غلط جت جوه المفتاح
-                .trim();                // يشيل المسافات اللي في الأول والآخر
+                // الخطوة دي بتصلح الغلطة اللي ظهرت في اللوج (n لازقة في الهيدر)
+                .replace(/-----BEGIN PRIVATE KEY-----n/g, '-----BEGIN PRIVATE KEY-----\n')
+                .replace(/n-----END PRIVATE KEY-----/g, '\n-----END PRIVATE KEY-----')
 
-            // إعادة بناء الهيدر والفوتر لو باظوا من التنظيف
-            const header = "-----BEGIN PRIVATE KEY-----";
-            const footer = "-----END PRIVATE KEY-----";
+                // الخطوات العادية لباقي الأسطر
+                .replace(/\\n/g, '\n')
+                .replace(/\\\\n/g, '\n');
 
-            if (!serviceAccount.private_key.includes(header)) {
-                serviceAccount.private_key = header + '\n' + serviceAccount.private_key;
-            }
-            if (!serviceAccount.private_key.includes(footer)) {
-                serviceAccount.private_key = serviceAccount.private_key + '\n' + footer;
-            }
-
-            // طباعة أول 20 حرف للتأكد (آمن، مبيفضحش المفتاح كله)
             console.log("🔑 [Firebase] Key Start Check:", JSON.stringify(serviceAccount.private_key.substring(0, 50)));
         }
     } else {
@@ -44,6 +32,7 @@ try {
     console.error("❌ [Firebase] Config Error:", error.message);
 }
 
+// 3. Initialize Firebase
 if (!admin.apps.length && serviceAccount) {
     try {
         admin.initializeApp({
