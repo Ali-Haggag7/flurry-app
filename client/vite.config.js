@@ -24,57 +24,13 @@ export default defineConfig({
       filename: "stats.html",
     }),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'firebase-messaging-sw.js',
+      // ------------------------------------
+
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'favicon.svg'],
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] }
-            }
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'gstatic-fonts-cache',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] }
-            }
-          },
-          {
-            urlPattern: ({ url }) => url.pathname.includes('/api/'),
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-data-cache',
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 3 },
-              cacheableResponse: { statuses: [0, 200] }
-            }
-          },
-          {
-            urlPattern: ({ request }) => request.destination === 'image',
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'images-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 7 }
-            }
-          },
-          {
-            urlPattern: ({ url }) => url.href.includes('clerk'),
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'clerk-sdk-cache',
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 7 },
-              cacheableResponse: { statuses: [0, 200] }
-            }
-          }
-        ]
-      },
       manifest: {
         name: 'Flurry',
         short_name: 'Flurry',
