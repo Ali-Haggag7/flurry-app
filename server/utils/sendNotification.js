@@ -36,8 +36,8 @@ export const sendPushNotification = async (userId, title, body, data = {}) => {
             },
             webpush: {
                 notification: {
-                    icon: APP_LOGO_URL,
-                    badge: senderIcon,
+                    icon: senderIcon,
+                    badge: APP_LOGO_URL,
                     image: data.image || null,
                     click_action: "https://flurry-app.vercel.app/",
                     tag: `flurry_msg_${Date.now()}`,
