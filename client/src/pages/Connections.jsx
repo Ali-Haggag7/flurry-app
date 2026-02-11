@@ -56,10 +56,16 @@ const Connections = () => {
     const [currentTab, setCurrentTab] = useState("Followers");
     const [searchQuery, setSearchQuery] = useState("");
 
-    const { currentUser } = useSelector((state) => state.user);
-    const { connections, pendingRequests, sentRequests, status } = useSelector(
+    const { currentUser, status: userStatus } = useSelector((state) => state.user);
+    const { connections, pendingRequests, sentRequests, status: connectionsStatus } = useSelector(
         (state) => state.connections
     );
+
+    const isDataLoading =
+        userStatus === "loading" ||
+        connectionsStatus === "loading" ||
+        userStatus === "idle" ||
+        connectionsStatus === "idle";
 
     // ========================================================
     // 🧠 Derived Data (Memoized)
@@ -238,7 +244,7 @@ const Connections = () => {
 
                 {/* --- Grid Content --- */}
                 <div className="flex-1">
-                    {status === "loading" && activeData.length === 0 ? (
+                    {isDataLoading ? (
                         <ConnectionsSkeleton />
                     ) : (
                         <motion.div

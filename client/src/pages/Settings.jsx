@@ -88,7 +88,7 @@ const TabButton = memo(({ tab, isActive, onClick }) => (
     <button
         onClick={onClick}
         className={`flex-shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold transition-all duration-300 relative overflow-hidden group whitespace-nowrap
-      ${isActive ? "text-primary bg-primary/10 shadow-sm" : "text-muted hover:text-content hover:bg-surface"}`}
+        ${isActive ? "text-primary bg-primary/10 shadow-sm" : "text-muted hover:text-content hover:bg-surface"}`}
     >
         <span className="relative z-10 flex items-center gap-2 text-sm md:text-base">
             {tab.icon} {tab.label}
@@ -439,7 +439,7 @@ const Settings = () => {
                 {/* Tabs Navigation */}
                 <div className="relative mb-10">
                     {/* Mobile Menu */}
-                    <div className="sm:hidden relative z-50">
+                    <div className="sm:hidden relative">
                         <button
                             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                             className="w-full flex items-center justify-between bg-surface border border-adaptive rounded-xl px-4 py-3 text-content font-bold shadow-sm transition-all active:scale-[0.99]"

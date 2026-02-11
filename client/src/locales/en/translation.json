@@ -436,8 +436,8 @@
         "removeMember": "Remove Member",
         "closeGroup": "Close Chat",
         "openGroup": "Open Chat",
-        "openGroupDesc":"Everyone can send",
-        "closeGroupDesc":"Only admins can send"
+        "openGroupDesc": "Everyone can send",
+        "closeGroupDesc": "Only admins can send"
     },
     "reactions": {
         "title": "Reactions",
@@ -460,6 +460,7 @@
     "createGroup": {
         "title": "Create Group",
         "nameRequired": "Group name is required!",
+        "imageRequired": "Group image is required!",
         "success": "Group created successfully! 🎉",
         "error": "Failed to create group",
         "change": "Change",
@@ -624,5 +625,10 @@
         "vote": "vote",
         "singleChoice": "Single Choice",
         "multipleChoice": "Multiple Choice"
+    },
+    "error": {
+        "globalTitle": "Something went wrong!",
+        "globalMessage": "We encountered an unexpected issue. Please try refreshing the page.",
+        "refreshButton": "Refresh Page"
     }
 }

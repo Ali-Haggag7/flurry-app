@@ -1,21 +1,26 @@
 /* src/firebase-messaging-sw.js */
 
-// 1. PWA & Caching Logic (Workbox)
-// --------------------------------------------------
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching';
 import { clientsClaim } from 'workbox-core';
 
-// Immediate control: This ensures the SW takes control immediately, not after a reload.
-self.skipWaiting();
-clientsClaim();
+// 1. PWA & Caching Logic (The Fix 🛠️)
+// --------------------------------------------------
 
-// Cleanup old caches to keep the app lightweight.
+// تنظيف الكاشات القديمة عشان مفيش ملفات قديمة تضرب الموقع
 cleanupOutdatedCaches();
 
-// 🚀 The Magic Line: Vite injects the list of files to cache here.
-// Without this, the PWA won't work offline properly.
-precacheAndRoute(self.__WB_MANIFEST);
+// self.skipWaiting() force causes the waiting service worker to become the active service worker.
+self.addEventListener('install', (event) => {
+    self.skipWaiting();
+});
 
+// وده بيخليه يسيطر على كل التابات المفتوحة فوراً
+self.addEventListener('activate', (event) => {
+    event.waitUntil(clients.claim());
+});
+
+// تحميل ملفات الموقع اللي Vite بيبعتها
+precacheAndRoute(self.__WB_MANIFEST || []);
 
 // 2. Firebase Cloud Messaging Logic
 // --------------------------------------------------
@@ -35,7 +40,6 @@ const firebaseConfig = {
 // Initialize Firebase only once
 if (firebase.apps.length === 0) {
     firebase.initializeApp(firebaseConfig);
-    // console.log("✅ [SW] Firebase Initialized inside PWA Service Worker");
 }
 
 const messaging = firebase.messaging();
@@ -45,9 +49,6 @@ const messaging = firebase.messaging();
  */
 messaging.onBackgroundMessage((payload) => {
     console.log('🌙 [SW] Background Notification Received:', payload);
-
-    // السطر ده هو اللي كان بيعمل التكرار
-    // return self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
 
@@ -77,13 +78,11 @@ self.addEventListener('notificationclick', function (event) {
     }
 
     // Smart Navigation:
-    // If the tab is already open, focus it. If not, open a new one.
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
             // 1. Check if tab is already open
             for (var i = 0; i < clientList.length; i++) {
                 var client = clientList[i];
-                // Check if the URL matches (ignoring query params if needed)
                 if (client.url.includes(urlToOpen) && 'focus' in client) {
                     return client.focus();
                 }

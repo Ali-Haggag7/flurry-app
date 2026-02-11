@@ -54,6 +54,8 @@ import { ThemeProvider } from "./context/ThemeContext";
 // --- Components ---
 import App from './App.jsx';
 import CallModal from './components/modals/CallModal';
+// ✅ Import the Error Boundary
+import GlobalErrorBoundary from './components/common/GlobalErrorBoundary.jsx';
 
 // --- Global Styles ---
 import './index.css';
@@ -103,24 +105,27 @@ const root = createRoot(document.getElementById('root'));
 
 root.render(
   <StrictMode>
-    <Provider store={store}>
-      <ClerkWithTranslation>
-        <BrowserRouter>
-          <SocketContextProvider>
-            <CallProvider>
-              <ThemeProvider>
+    {/* ✅ Wrapped everything here to catch errors in Providers too */}
+    <GlobalErrorBoundary>
+      <Provider store={store}>
+        <ClerkWithTranslation>
+          <BrowserRouter>
+            <SocketContextProvider>
+              <CallProvider>
+                <ThemeProvider>
 
-                {/* Main Application */}
-                <App />
+                  {/* Main Application */}
+                  <App />
 
-                {/* Global Modals (Placed here to access all contexts) */}
-                <CallModal />
+                  {/* Global Modals (Placed here to access all contexts) */}
+                  <CallModal />
 
-              </ThemeProvider>
-            </CallProvider>
-          </SocketContextProvider>
-        </BrowserRouter>
-      </ClerkWithTranslation>
-    </Provider>
+                </ThemeProvider>
+              </CallProvider>
+            </SocketContextProvider>
+          </BrowserRouter>
+        </ClerkWithTranslation>
+      </Provider>
+    </GlobalErrorBoundary>
   </StrictMode>
 );

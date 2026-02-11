@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { useUser, useAuth } from '@clerk/clerk-react'; // 🟢 Added useAuth
+import { useUser, useAuth } from '@clerk/clerk-react';
 import { Toaster } from 'react-hot-toast';
 import { useTranslation } from "react-i18next";
 
@@ -9,28 +9,54 @@ import Loading from './components/common/Loading';
 import AuthWrapper from './layouts/AuthWrapper';
 import Layout from './layouts/Layout';
 import useOfflineSync from "./hooks/useOfflineSync";
-import api from "./lib/axios"; // 🟢 Import API
-import { requestFcmToken } from "./lib/firebase"; // 🟢 Import Firebase Helper
+import api from "./lib/axios";
+import { requestFcmToken } from "./lib/firebase";
+import ScrollToTop from "./utils/ScrollToTop";
+
+// --- Utility: Smart Lazy Loading ---
+/**
+ * Wraps React.lazy to automatically reload the page once if a chunk fails to load.
+ * This prevents the "White Screen of Death" when deploying new versions (chunk mismatch).
+ */
+const lazyWithRetry = (componentImport) =>
+  lazy(async () => {
+    const pageHasAlreadyBeenForceRefreshed = JSON.parse(
+      window.sessionStorage.getItem('page-has-been-force-refreshed') || 'false'
+    );
+
+    try {
+      const component = await componentImport();
+      window.sessionStorage.setItem('page-has-been-force-refreshed', 'false');
+      return component;
+    } catch (error) {
+      if (!pageHasAlreadyBeenForceRefreshed) {
+        // Force refresh the page to fetch the newly generated chunks from the server
+        window.sessionStorage.setItem('page-has-been-force-refreshed', 'true');
+        window.location.reload();
+      }
+      throw error;
+    }
+  });
 
 // --- Lazy Loaded Pages (Code Splitting) ---
-// Optimized for performance: Routes are loaded only when requested to reduce initial bundle size.
-const Login = lazy(() => import('./pages/Login'));
-const Feed = lazy(() => import('./pages/Feed'));
-const Search = lazy(() => import('./pages/Search'));
-const CreatePost = lazy(() => import('./pages/CreatePost'));
-const PostDetails = lazy(() => import('./pages/PostDetails'));
-const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
-const Settings = lazy(() => import('./pages/Settings'));
-const Messages = lazy(() => import('./pages/Messages'));
-const Chat = lazy(() => import('./pages/Chat'));
-const Connections = lazy(() => import('./pages/Connections'));
-const Profile = lazy(() => import('./pages/Profile'));
-const NetworkPage = lazy(() => import('./pages/NetworkPage'));
-const MyGroups = lazy(() => import('./pages/MyGroups'));
-const AvailableGroups = lazy(() => import('./pages/AvailableGroups'));
-const GroupChat = lazy(() => import('./pages/GroupChat'));
-const GroupRequests = lazy(() => import('./pages/GroupRequests'));
-const NotFound = lazy(() => import('./pages/NotFound'));
+// Optimized for performance: Routes are loaded safely with retry logic
+const Login = lazyWithRetry(() => import('./pages/Login'));
+const Feed = lazyWithRetry(() => import('./pages/Feed'));
+const Search = lazyWithRetry(() => import('./pages/Search'));
+const CreatePost = lazyWithRetry(() => import('./pages/CreatePost'));
+const PostDetails = lazyWithRetry(() => import('./pages/PostDetails'));
+const NotificationsPage = lazyWithRetry(() => import('./pages/NotificationsPage'));
+const Settings = lazyWithRetry(() => import('./pages/Settings'));
+const Messages = lazyWithRetry(() => import('./pages/Messages'));
+const Chat = lazyWithRetry(() => import('./pages/Chat'));
+const Connections = lazyWithRetry(() => import('./pages/Connections'));
+const Profile = lazyWithRetry(() => import('./pages/Profile'));
+const NetworkPage = lazyWithRetry(() => import('./pages/NetworkPage'));
+const MyGroups = lazyWithRetry(() => import('./pages/MyGroups'));
+const AvailableGroups = lazyWithRetry(() => import('./pages/AvailableGroups'));
+const GroupChat = lazyWithRetry(() => import('./pages/GroupChat'));
+const GroupRequests = lazyWithRetry(() => import('./pages/GroupRequests'));
+const NotFound = lazyWithRetry(() => import('./pages/NotFound'));
 
 /**
  * @component ProtectedRoute
@@ -52,12 +78,12 @@ const ProtectedRoute = () => {
  */
 const App = () => {
   const { i18n } = useTranslation();
-  const { userId, getToken } = useAuth(); // 🟢 Get User ID & Token for FCM
+  const { userId, getToken } = useAuth();
 
-  // 🟢 2. Run Sync Engine Globally
+  // 1. Run Sync Engine Globally
   useOfflineSync();
 
-  // 🟢 3. Initialize Push Notifications
+  // 2. Initialize Push Notifications
   useEffect(() => {
     const initializeNotifications = async () => {
       if (!userId) return; // Don't run if not logged in
@@ -81,7 +107,7 @@ const App = () => {
     initializeNotifications();
   }, [userId, getToken]);
 
-  // 🟢 4. Handle Language Direction
+  // 3. Handle Language Direction
   useEffect(() => {
     // Force direction based on language
     document.documentElement.dir = i18n.dir();
@@ -91,21 +117,21 @@ const App = () => {
 
   return (
     <>
+      <ScrollToTop />
+
       {/* Global Toast Notifications - Themed & Localized */}
       <Toaster
         position="top-center"
         reverseOrder={false}
-        // Force toast container direction based on language
         containerStyle={{
           direction: i18n.dir(),
         }}
         toastOptions={{
           className: 'bg-surface text-content border border-adaptive shadow-lg',
           style: {
-            // Inherit styles from Tailwind classes where possible, specific overrides for library defaults
             padding: '16px',
             borderRadius: '12px',
-            direction: i18n.dir(), // Ensure text inside toast follows direction
+            direction: i18n.dir(),
             fontFamily: 'inherit',
           },
           success: {

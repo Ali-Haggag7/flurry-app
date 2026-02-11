@@ -37,7 +37,8 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!name.trim()) return toast.error(t("createGroup.nameRequired")); // 🟢
+        if(!image) return toast.error(t("createGroup.imageRequired"));
+        if (!name.trim()) return toast.error(t("createGroup.nameRequired"));
 
         setLoading(true);
         const formData = new FormData();
@@ -56,7 +57,7 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated }) => {
             });
 
             toast.success(t("createGroup.success")); // 🟢
-            if (onGroupCreated) onGroupCreated(res.data);
+            if (onGroupCreated) onGroupCreated(res.data.group);
 
             // Reset & Close
             setName("");

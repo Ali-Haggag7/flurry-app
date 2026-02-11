@@ -114,7 +114,14 @@ export const createGroup = expressAsyncHandler(async (req, res) => {
 
     // 6. Populate for Frontend
     group = await group.populate([
-        { path: "members.user", select: "full_name profile_picture" }
+        {
+            path: "owner",
+            select: "clerkId full_name profile_picture"
+        },
+        {
+            path: "members.user",
+            select: "clerkId full_name profile_picture"
+        }
     ]);
 
     // 7. Notify Members (Optional: Socket Event "newGroupAdded")
@@ -453,8 +460,8 @@ export const sendGroupMessage = expressAsyncHandler(async (req, res) => {
 
         if (recipientIds.length > 0) {
             let notificationBody = text;
-            if (messageType === 'image') notificationBody = `📷 ${currentUser.full_name} sent a photo`;
-            else if (messageType === 'audio') notificationBody = `🎤 ${currentUser.full_name} sent a voice message`;
+            if (messageType === 'image') notificationBody = `${currentUser.full_name} sent a photo 📷`;
+            else if (messageType === 'audio') notificationBody = `${currentUser.full_name} sent a voice message 🎤`;
             else notificationBody = `${currentUser.full_name}: ${text}`;
 
             await sendGroupPushNotification(
@@ -464,7 +471,9 @@ export const sendGroupMessage = expressAsyncHandler(async (req, res) => {
                 {
                     type: "group_chat",
                     groupId: groupId,
-                    groupName: group.name
+                    groupName: group.name,
+                    groupImage: group.group_image || group.image || "",
+                    senderImage: currentUser.profile_picture || currentUser.image || ""
                 }
             );
         }

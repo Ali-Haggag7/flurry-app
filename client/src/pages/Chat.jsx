@@ -790,7 +790,7 @@ const ChatHeader = memo(({ targetUser, isChatDisabled, isOnline, currentUser, on
     return (
         <div className="absolute top-0 start-0 end-0 h-20 bg-surface/80 backdrop-blur-lg flex items-center justify-between px-4 z-20 border-b border-adaptive shadow-sm transition-all">
             <div className="flex items-center gap-3 cursor-pointer" onClick={onProfile}>
-                <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="p-2 hover:bg-main rounded-full transition text-muted hover:text-primary md:hidden rtl:scale-x-[-1]">
+                <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="p-2 hover:bg-main rounded-full transition text-muted hover:text-primary rtl:scale-x-[-1]">
                     <ArrowLeft size={22} />
                 </button>
                 <div className="relative">

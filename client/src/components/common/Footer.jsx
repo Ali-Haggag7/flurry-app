@@ -105,7 +105,7 @@ const Footer = () => {
                     ${showMobileMenu ? "bg-primary/10 border-primary/30 text-primary" : "bg-surface border-adaptive text-muted hover:border-primary/50"}`}
                 >
                     <div className="flex items-center gap-3">
-                        <div className={`p-1.5 rounded-sg ${showMobileMenu ? "bg-primary text-white" : "bg-main text-muted group-hover:text-primary"}`}>
+                        <div className={`p-1.5 rounded-lg ${showMobileMenu ? "bg-primary text-white" : "bg-main text-muted group-hover:text-primary"}`}>
                             <HelpCircle size={18} />
                         </div>
                         <div className="text-start">

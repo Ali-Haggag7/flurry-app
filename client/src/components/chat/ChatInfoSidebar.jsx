@@ -69,7 +69,7 @@ const MemberItem = memo(({ member, isOwner, amIAdmin, currentUserId, onKick, onC
             {amIAdmin && !isOwner && !isMe && (
                 <button
                     onClick={(e) => { e.stopPropagation(); onKick(member._id, member.full_name); }}
-                    className="p-2 text-red-500/50 hover:text-red-600 bg-transparent hover:bg-red-500/10 rounded-full transition-all opacity-0 group-hover/item:opacity-100"
+                    className="p-2 text-red-500/50 hover:text-red-600 bg-transparent hover:bg-red-500/10 rounded-full transition-all md:opacity-0 group-hover/item:opacity-100"
                     title={t("chatInfo.removeMember")}
                 >
                     <UserMinus size={18} />

@@ -210,10 +210,10 @@ export const sendMessage = expressAsyncHandler(async (req, res) => {
     // 🔥🔥🔥 9. Push Notification Logic (New Addition) 🔥🔥🔥
     try {
         let notificationBody = text;
-        if (messageType === 'image') notificationBody = "📷 Sent a photo";
-        if (messageType === 'audio') notificationBody = "🎤 Sent a voice message";
-        if (messageType === 'shared_post') notificationBody = "🔗 Shared a post";
-        if (messageType === 'story_reply') notificationBody = "📝 Replied to a story";
+        if (messageType === 'image') notificationBody = " Sent a photo 📷";
+        if (messageType === 'audio') notificationBody = " Sent a voice message 🎤";
+        if (messageType === 'shared_post') notificationBody = " Shared a post 🔗";
+        if (messageType === 'story_reply') notificationBody = " Replied to a story 📝";
 
         await sendPushNotification(
             finalReceiverId,
@@ -222,7 +222,8 @@ export const sendMessage = expressAsyncHandler(async (req, res) => {
             {
                 type: "chat",
                 chatId: senderMongoId.toString(),
-                senderId: senderMongoId.toString()
+                senderId: senderMongoId.toString(),
+                senderImage: senderUser.profile_picture || senderUser.image || "",
             }
         );
     } catch (error) {

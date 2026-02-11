@@ -783,7 +783,7 @@ const TabNavigation = memo(({ activeTab, setActiveTab, isMyProfile, TABS }) => (
                 <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`px-6 md:px-10 pb-3 text-sm font-bold tracking-wide transition-all relative ${activeTab === tab.id ? "text-primary" : "text-muted hover:text-content"
+                    className={`px-4 md:px-10 pb-3 text-sm font-bold tracking-wide transition-all relative ${activeTab === tab.id ? "text-primary" : "text-muted hover:text-content"
                         }`}
                 >
                     <span className="flex items-center gap-2">

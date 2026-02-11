@@ -104,9 +104,9 @@ const MessageActionMenu = memo(({
 
     return (
         <div className={`
-            absolute flex items-center gap-1 bg-surface/95 backdrop-blur-md border border-adaptive rounded-full p-1 shadow-lg z-20 transition-all duration-200
+            absolute flex flex-col md:flex-row items-center gap-1 bg-surface/95 backdrop-blur-md border border-adaptive rounded-full p-1 shadow-lg z-20 transition-all duration-200
             top-1/2 -translate-y-1/2
-            ${isMe ? "-start-26 origin-right" : "-end-18 origin-left"}
+            ${isMe ? "-start-11 md:-start-26 origin-right" : "-end-10 md:-end-18 origin-left"}
             ${showMobileMenu ? "opacity-100 visible scale-100" : "opacity-0 invisible scale-90"}
             md:opacity-0 md:invisible md:scale-90
             md:group-hover/bubble:opacity-100 md:group-hover/bubble:visible md:group-hover/bubble:scale-100
@@ -415,8 +415,7 @@ const MessageItem = ({
                                             <img
                                                 src={msg.media_url}
                                                 alt="media"
-                                                className="rounded-lg w-auto h-auto max-w-full sm:max-w-[300px] max-h-[350px] object-cover mb-1.5 cursor-pointer hover:brightness-90 transition border border-black/10 dark:border-white/10"
-                                                onClick={() => window.open(msg.media_url, '_blank')}
+                                                className="rounded-lg w-auto h-auto max-w-full sm:max-w-[300px] max-h-[350px] object-cover mb-1.5  hover:brightness-90 transition border border-black/10 dark:border-white/10"
                                             />
                                         )}
                                         {msg.message_type === "audio" && <VoiceMessage src={msg.media_url} isMe={isMe} />}
@@ -481,7 +480,9 @@ const arePropsEqual = (prevProps, nextProps) => {
 
     const isPollSame = prevProps.msg.poll === nextProps.msg.poll;
 
-    return isMsgSame && (wasActive === isActive) && isPollSame;
+    const isVoteSame = prevProps.onVote === nextProps.onVote;
+
+    return isMsgSame && (wasActive === isActive) && isPollSame && isVoteSame;
 };
 
 export default memo(MessageItem, arePropsEqual);
